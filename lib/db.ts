@@ -149,32 +149,36 @@ interface LocalDbSchema {
   social_buttons: SocialButton[];
 }
 
+let inMemoryDb: LocalDbSchema | null = null;
+
 const readLocalDb = (): LocalDbSchema => {
-  ensureLocalDirs();
-  if (!fs.existsSync(DB_FILE)) {
-    const initialDb: LocalDbSchema = {
-      site_settings: DEFAULT_SETTINGS,
-      social_buttons: DEFAULT_BUTTONS,
-    };
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
-    return initialDb;
-  }
   try {
-    const data = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(data);
+    ensureLocalDirs();
+    if (fs.existsSync(DB_FILE)) {
+      const data = fs.readFileSync(DB_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
   } catch (error) {
-    console.error('Error reading local DB, resetting to defaults:', error);
-    const initialDb: LocalDbSchema = {
+    console.warn('Gagal membaca database lokal dari disk, menggunakan memori:', error);
+  }
+
+  if (!inMemoryDb) {
+    inMemoryDb = {
       site_settings: DEFAULT_SETTINGS,
       social_buttons: DEFAULT_BUTTONS,
     };
-    return initialDb;
   }
+  return inMemoryDb;
 };
 
 const writeLocalDb = (data: LocalDbSchema) => {
-  ensureLocalDirs();
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  inMemoryDb = data;
+  try {
+    ensureLocalDirs();
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+  } catch (error) {
+    console.warn('Gagal menulis database lokal ke disk (lingkungan read-only):', error);
+  }
 };
 
 // --- ANTARMUKA OPERASI LAYANAN (DATABASE & STORAGE) ---
@@ -197,22 +201,30 @@ export const getSiteSettings = async (): Promise<SiteSettings> => {
         .limit(1)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.warn('Supabase get settings error (mungkin tabel belum dibuat):', error.message);
+        return DEFAULT_SETTINGS;
+      }
       if (data) return data as SiteSettings;
 
-      // Jika kosong, inisialisasi baris pertama menggunakan admin client
-      const adminSupabase = getSupabaseAdmin();
-      const { data: inserted, error: insertError } = await adminSupabase
-        .from('site_settings')
-        .insert([DEFAULT_SETTINGS])
-        .select()
-        .single();
+      // Jika kosong (tabel ada tapi tidak ada data), inisialisasi baris pertama menggunakan admin client
+      try {
+        const adminSupabase = getSupabaseAdmin();
+        const { data: inserted, error: insertError } = await adminSupabase
+          .from('site_settings')
+          .insert([DEFAULT_SETTINGS])
+          .select()
+          .single();
 
-      if (insertError) throw insertError;
-      return inserted as SiteSettings;
-    } catch (err) {
-      console.error('Supabase error, falling back to local database:', err);
-      return readLocalDb().site_settings;
+        if (insertError) throw insertError;
+        return inserted as SiteSettings;
+      } catch (insertErr: any) {
+        console.error('Gagal menginisialisasi settings di Supabase:', insertErr?.message);
+        return DEFAULT_SETTINGS;
+      }
+    } catch (err: any) {
+      console.error('Supabase error on get settings, returning default:', err?.message);
+      return DEFAULT_SETTINGS;
     }
   } else {
     return readLocalDb().site_settings;
@@ -261,21 +273,15 @@ export const getSocialButtons = async (): Promise<SocialButton[]> => {
         .select('*')
         .order('display_order', { ascending: true });
 
-      if (error) throw error;
-      if (data && data.length > 0) return data as SocialButton[];
-
-      // Jika tabel kosong di Supabase, masukkan tombol default
-      const adminSupabase = getSupabaseAdmin();
-      const { data: inserted, error: insertError } = await adminSupabase
-        .from('social_buttons')
-        .insert(DEFAULT_BUTTONS)
-        .select();
-
-      if (insertError) throw insertError;
-      return inserted as SocialButton[];
-    } catch (err) {
-      console.error('Supabase error on get buttons, falling back to local:', err);
-      return readLocalDb().social_buttons.sort((a, b) => a.display_order - b.display_order);
+      if (error) {
+        // Jika tabel belum dibuat atau ada error, kembalikan array kosong sesuai keinginan pengguna
+        console.warn('Supabase get buttons error (mungkin tabel belum dibuat):', error.message);
+        return [];
+      }
+      return (data as SocialButton[]) || [];
+    } catch (err: any) {
+      console.error('Supabase error on get buttons, returning empty array:', err?.message);
+      return [];
     }
   } else {
     return readLocalDb().social_buttons.sort((a, b) => a.display_order - b.display_order);

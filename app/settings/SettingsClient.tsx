@@ -1406,67 +1406,42 @@ export default function SettingsClient({
           {activeTab === 'security' && (
             <div className="p-6 rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-sm space-y-6 animate-fade-in" style={{ animationDuration: '0.3s' }}>
               <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                <h3 className="font-semibold text-sm text-slate-300">Ganti Password Akses Dashboard</h3>
+                <h3 className="font-semibold text-sm text-slate-300">Konfigurasi Keamanan Sesi</h3>
                 <Shield className="w-4 h-4 text-slate-500" />
               </div>
 
-              <form onSubmit={handlePasswordChange} className="space-y-4 max-w-lg">
-                {/* Password Lama */}
-                <div className="space-y-1.5">
-                  <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                    PASSWORD SEBELUMNYA / LAMA
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={oldPassword}
-                    onChange={(e) => setOldPassword(e.target.value)}
-                    placeholder="Masukkan password lama..."
-                    className="w-full px-4 py-3 rounded-xl border border-white/10 bg-neutral-950 text-white placeholder-slate-600 text-sm focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Password Baru */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                      PASSWORD BARU
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Minimal 6 karakter..."
-                      className="w-full px-4 py-3 rounded-xl border border-white/10 bg-neutral-950 text-white placeholder-slate-600 text-sm focus:outline-none"
-                    />
+              <div className="p-5 rounded-2xl border border-blue-500/10 bg-blue-500/[0.03] space-y-4 max-w-2xl">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 shrink-0">
+                    <Info className="w-5 h-5" />
                   </div>
-
-                  {/* Konfirmasi Password */}
                   <div className="space-y-1.5">
-                    <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                      KONFIRMASI PASSWORD BARU
-                    </label>
-                    <input
-                      type="password"
-                      required
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Ketik ulang password baru..."
-                      className="w-full px-4 py-3 rounded-xl border border-white/10 bg-neutral-950 text-white placeholder-slate-600 text-sm focus:outline-none"
-                    />
+                    <h4 className="font-semibold text-sm text-white">Sistem Keamanan Berbasis Lingkungan (Environment-Based)</h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Sesuai dengan kebijakan sistem keamanan terbaru, kata sandi (password) untuk mengakses Dashboard Pengaturan ini disimpan secara aman langsung di dalam konfigurasi variabel lingkungan (<code className="px-1.5 py-0.5 rounded bg-black/40 text-blue-400 font-mono text-[11px]">.env</code>) dan tidak disimpan di database eksternal. Hal ini mencegah kebocoran data jika database mengalami kendala.
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-white/5">
-                  <button
-                    type="submit"
-                    className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition-all duration-300 shadow-lg"
-                  >
-                    Ubah Password Admin
-                  </button>
+                <div className="border-t border-white/5 pt-4 space-y-3">
+                  <span className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                    Cara Mengubah Password Sesi Admin:
+                  </span>
+                  <ul className="text-xs text-slate-400 space-y-2 list-disc pl-4 leading-relaxed">
+                    <li>
+                      <strong className="text-slate-200">Lingkungan Pengembangan Lokal:</strong> Perbarui nilai variabel <code className="px-1.5 py-0.5 rounded bg-black/40 text-blue-400 font-mono text-[11px]">ADMIN_PASSWORD</code> pada berkas <code className="px-1.5 py-0.5 rounded bg-black/40 text-slate-300 font-mono text-[11px]">.env</code> Anda secara langsung.
+                    </li>
+                    <li>
+                      <strong className="text-slate-200">Lingkungan Produksi (Vercel / Cloud Run):</strong> Buka Dashboard proyek Anda (misal: Vercel Dashboard), masuk ke tab <strong className="text-slate-300 font-medium">Settings &gt; Environment Variables</strong>, ubah nilai <code className="px-1.5 py-0.5 rounded bg-black/40 text-blue-400 font-mono text-[11px]">ADMIN_PASSWORD</code>, lalu lakukan redeploy proyek Anda.
+                    </li>
+                  </ul>
                 </div>
-              </form>
+
+                <div className="pt-2 flex items-center gap-2 text-amber-400 text-xs bg-amber-500/5 border border-amber-500/10 rounded-xl p-3">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Demi keselamatan akses dashboard Anda, pastikan untuk menggunakan kata sandi yang kuat dan tidak membagikannya kepada siapa pun.</span>
+                </div>
+              </div>
             </div>
           )}
 

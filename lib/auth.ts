@@ -4,13 +4,14 @@ import crypto from 'crypto';
 const SESSION_COOKIE_NAME = 'reylan_admin_session';
 
 function getAdminPasswordHash(): string {
-  const password = process.env.ADMIN_PASSWORD || 'admin123';
+  const password = (process.env.ADMIN_PASSWORD || 'admin123').trim().replace(/^['"]|['"]$/g, '');
   return crypto.createHash('sha256').update(password).digest('hex');
 }
 
 export async function loginAdmin(password: string): Promise<boolean> {
-  const currentPassword = process.env.ADMIN_PASSWORD || 'admin123';
-  const isValid = password === currentPassword;
+  let currentPassword = process.env.ADMIN_PASSWORD || 'admin123';
+  currentPassword = currentPassword.trim().replace(/^['"]|['"]$/g, '');
+  const isValid = password.trim() === currentPassword;
   if (isValid) {
     const cookieStore = await cookies();
     const sessionHash = getAdminPasswordHash();
