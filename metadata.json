@@ -1,0 +1,6 @@
+{
+  "name": "Media Sosial ReyLan",
+  "description": "Website bio link (link in bio) dinamis bergaya glassmorphism dengan manajemen konten lengkap dan pemutar musik latar belakang.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
