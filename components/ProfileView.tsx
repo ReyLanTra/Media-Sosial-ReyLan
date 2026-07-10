@@ -15,8 +15,22 @@ interface ProfileViewProps {
   buttons: SocialButton[];
 }
 
-export default function ProfileView({ settings, buttons }: ProfileViewProps) {
+export default function ProfileView({ settings: initialSettings, buttons = [] }: ProfileViewProps) {
   const isMobile = useIsMobile();
+
+  const settings = initialSettings || {
+    account_name: 'Media Sosial ReyLan',
+    is_verified: true,
+    bio: 'Selamat datang di halaman profil resmi ReyLan. Hubungkan diri Anda dengan saya melalui media sosial di bawah!',
+    profile_photo_url: 'https://picsum.photos/seed/reylan_profile/150/150',
+    favicon_url: null,
+    background_url: 'https://picsum.photos/seed/reylan_bg/1920/1080',
+    background_type: 'image' as const,
+    backsound_url: null,
+    backsound_volume: 50,
+    backsound_enabled: true,
+    footer_text: '© 2026 ReyLan. All rights reserved.',
+  };
 
   // Mematikan scroll, drag to refresh, klik kanan, copy teks, dan long press preview di halaman utama
   React.useEffect(() => {
@@ -78,8 +92,8 @@ export default function ProfileView({ settings, buttons }: ProfileViewProps) {
   }
 
   // Filter hanya tombol sosial yang aktif dan urutkan berdasarkan display_order
-  const activeButtons = buttons
-    .filter((btn) => btn.is_active)
+  const activeButtons = (buttons || [])
+    .filter((btn) => btn && btn.is_active)
     .sort((a, b) => a.display_order - b.display_order);
 
   // Variasi animasi untuk container bento/daftar tombol

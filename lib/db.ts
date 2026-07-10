@@ -87,11 +87,15 @@ const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads');
 
 // Pastikan direktori lokal ada
 const ensureLocalDirs = () => {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+  } catch (error) {
+    console.warn('Gagal membuat direktori lokal (lingkungan read-only):', error);
   }
 };
 
@@ -494,6 +498,17 @@ export const uploadFileToStorage = async (
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdmin();
+
+      // Coba buat bucket jika belum ada di Supabase
+      try {
+        const { data: buckets } = await supabase.storage.listBuckets();
+        const exists = buckets?.some(b => b.name === bucketName);
+        if (!exists) {
+          await supabase.storage.createBucket(bucketName, { public: true });
+        }
+      } catch (bucketErr) {
+        console.warn(`Gagal memeriksa/membuat bucket "${bucketName}":`, bucketErr);
+      }
       
       // Hapus file lama di bucket ini jika ada, agar tidak menumpuk
       // Khusus untuk bucket non-logo-medsos yang filenya tunggal, atau jika kita tahu URL lamanya.
@@ -559,9 +574,15 @@ export const uploadFileToStorage = async (
   }
 
   // Tulis file lokal
-  const localFilePath = path.join(UPLOADS_DIR, fileName);
-  fs.writeFileSync(localFilePath, buffer);
-
-  // Kembalikan URL publik lokal yang bisa diakses
-  return `/uploads/${fileName}`;
+  try {
+    const localFilePath = path.join(UPLOADS_DIR, fileName);
+    fs.writeFileSync(localFilePath, buffer);
+    // Kembalikan URL publik lokal yang bisa diakses
+    return `/uploads/${fileName}`;
+  } catch (err) {
+    console.error('Gagal menulis file lokal, menggunakan fallback data URL:', err);
+    // Jika benar-benar gagal menulis ke disk (lingkungan read-only seperti Vercel),
+    // kembalikan saja fileBase64 (data URL) agar tetap bisa ditampilkan sementara di browser!
+    return fileBase64;
+  }
 };
