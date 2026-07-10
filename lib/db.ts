@@ -39,7 +39,7 @@ export interface SocialButton {
 // Cek ketersediaan variabel lingkungan Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '';
 
 const isSupabaseConfigured = (): boolean => {
   return (
@@ -60,6 +60,9 @@ const getSupabaseAdmin = (): SupabaseClient => {
       throw new Error('Supabase tidak dikonfigurasi.');
     }
     // Gunakan service role key jika ada untuk bypass RLS pada aksi admin (server-side)
+    if (!supabaseServiceKey) {
+      console.warn('PERINGATAN: SUPABASE_SERVICE_ROLE_KEY atau SUPABASE_SERVICE_KEY tidak ditemukan. Mencoba menggunakan anon key (bisa gagal jika kebijakan RLS pada tabel/storage diaktifkan secara ketat).');
+    }
     const key = supabaseServiceKey || supabaseAnonKey;
     supabaseAdminClient = createClient(supabaseUrl, key, {
       auth: { persistSession: false }
@@ -605,11 +608,11 @@ export const uploadFileToStorage = async (
     // Jika gagal menulis ke disk lokal (karena lingkungan read-only di server produksi)
     // dan sebelumnya Supabase gagal, kita harus melempar error deskriptif yang jelas ke klien.
     if (isSupabaseConfigured()) {
-      const detailMsg = supabaseUploadError?.message || 'Access Denied atau Kebijakan Penyimpanan (Storage Policy RLS) ditolak.';
+      const detailMsg = supabaseUploadError?.message || 'Access Denied.';
       throw new Error(
-        `Gagal mengunggah ke Supabase Storage (bucket: "${bucketName}"). ` +
-        `Detail: "${detailMsg}". Pastikan Anda telah mengonfigurasi kebijakan akses (Storage Policies RLS) ` +
-        `di Dashboard Supabase Anda untuk bucket "${bucketName}" agar mengizinkan operasi SELECT dan INSERT secara publik/anonim.`
+        `Gagal mengunggah file ke Supabase Storage (bucket: "${bucketName}"). ` +
+        `Detail: "${detailMsg}". Pastikan Anda telah mengonfigurasi variabel lingkungan SUPABASE_SERVICE_ROLE_KEY ` +
+        `di Settings Dashboard atau file .env Anda agar unggahan file melewati (bypass) kebijakan keamanan RLS.`
       );
     } else {
       throw new Error(
