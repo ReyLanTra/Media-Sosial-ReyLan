@@ -449,6 +449,23 @@ export const deleteFileFromStorage = async (bucketName: string, fileUrl: string 
   }
 };
 
+// Fungsi pembantu menebak tipe MIME berdasarkan ekstensi file
+const getMimeType = (ext: string): string => {
+  const mimeTypes: { [key: string]: string } = {
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.ico': 'image/x-icon',
+    '.mp3': 'audio/mpeg',
+    '.mp4': 'video/mp4',
+    '.wav': 'audio/wav',
+    '.svg': 'image/svg+xml',
+  };
+  return mimeTypes[ext.toLowerCase()] || 'application/octet-stream';
+};
+
 // Fungsi mengunggah file ke storage (lokal atau Supabase)
 export const uploadFileToStorage = async (
   bucketName: string,
@@ -495,6 +512,8 @@ export const uploadFileToStorage = async (
     fileName = `${bucketName}-${Date.now()}${ext}`;
   }
 
+  let supabaseUploadError: any = null;
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdmin();
@@ -512,7 +531,6 @@ export const uploadFileToStorage = async (
       
       // Hapus file lama di bucket ini jika ada, agar tidak menumpuk
       // Khusus untuk bucket non-logo-medsos yang filenya tunggal, atau jika kita tahu URL lamanya.
-      // Kita bisa menghapus file lama terlebih dahulu sebelum menimpanya.
       try {
         const { data: list } = await supabase.storage.from(bucketName).list();
         if (list && list.length > 0) {
@@ -533,11 +551,13 @@ export const uploadFileToStorage = async (
         console.warn('Error clearing old storage files:', err);
       }
 
+      const contentType = (matches && matches[1]) ? matches[1] : getMimeType(ext);
+
       // Unggah file baru ke Supabase
       const { data, error } = await supabase.storage
         .from(bucketName)
         .upload(fileName, buffer, {
-          contentType: matches ? matches[1] : undefined,
+          contentType: contentType,
           upsert: true,
         });
 
@@ -546,8 +566,9 @@ export const uploadFileToStorage = async (
       // Dapatkan URL publik file
       const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
       return publicUrlData.publicUrl;
-    } catch (err) {
-      console.error(`Gagal unggah file ke Supabase Storage "${bucketName}", beralih ke lokal:`, err);
+    } catch (err: any) {
+      console.error(`Gagal unggah file ke Supabase Storage "${bucketName}":`, err);
+      supabaseUploadError = err;
       // Lanjutkan ke fallback lokal jika Supabase gagal
     }
   }
@@ -580,9 +601,20 @@ export const uploadFileToStorage = async (
     // Kembalikan URL publik lokal yang bisa diakses
     return `/uploads/${fileName}`;
   } catch (err) {
-    console.error('Gagal menulis file lokal, menggunakan fallback data URL:', err);
-    // Jika benar-benar gagal menulis ke disk (lingkungan read-only seperti Vercel),
-    // kembalikan saja fileBase64 (data URL) agar tetap bisa ditampilkan sementara di browser!
-    return fileBase64;
+    console.error('Gagal menulis file lokal:', err);
+    // Jika gagal menulis ke disk lokal (karena lingkungan read-only di server produksi)
+    // dan sebelumnya Supabase gagal, kita harus melempar error deskriptif yang jelas ke klien.
+    if (isSupabaseConfigured()) {
+      const detailMsg = supabaseUploadError?.message || 'Access Denied atau Kebijakan Penyimpanan (Storage Policy RLS) ditolak.';
+      throw new Error(
+        `Gagal mengunggah ke Supabase Storage (bucket: "${bucketName}"). ` +
+        `Detail: "${detailMsg}". Pastikan Anda telah mengonfigurasi kebijakan akses (Storage Policies RLS) ` +
+        `di Dashboard Supabase Anda untuk bucket "${bucketName}" agar mengizinkan operasi SELECT dan INSERT secara publik/anonim.`
+      );
+    } else {
+      throw new Error(
+        `Gagal menyimpan file secara lokal karena direktori penyimpanan bersifat Read-Only (hanya-baca) dan Supabase belum terkonfigurasi.`
+      );
+    }
   }
 };
