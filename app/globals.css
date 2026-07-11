@@ -6,25 +6,13 @@
   --font-mono: var(--font-mono), ui-monospace, monospace;
 }
 
-/* Matikan pull-to-refresh dan scrolling default */
-html, body {
-  overscroll-behavior-y: none !important;
-  overscroll-behavior: none !important;
-  -webkit-touch-callout: none !important;
-  user-select: none !important;
-  -webkit-user-select: none !important;
+/* Scroll behavior default yang mulus */
+html {
+  scroll-behavior: smooth;
 }
 
-/* Memperbolehkan input dan textarea di halaman pengaturan untuk tetap bisa diseleksi */
-input, textarea {
-  user-select: text !important;
-  -webkit-user-select: text !important;
-}
-
-/* Melindungi elemen sensitif dari hold/long press di iOS/Android */
-a, img, button, [role="button"] {
-  -webkit-touch-callout: none !important;
-  -webkit-user-drag: none !important;
+/* Hilangkan highlight tap abu-abu bawaan mobile pada tombol dan link */
+a, button, [role="button"] {
   -webkit-tap-highlight-color: transparent;
 }
 

@@ -25,15 +25,13 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <html lang="id" className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
-      <body suppressHydrationWarning className="font-sans antialiased text-white select-none">
+      <body suppressHydrationWarning className="font-sans antialiased text-white">
         {children}
       </body>
     </html>

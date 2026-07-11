@@ -18,48 +18,91 @@ interface ProfileViewProps {
 export default function ProfileView({ settings: initialSettings, buttons = [] }: ProfileViewProps) {
   const isMobile = useIsMobile();
 
-  const settings = initialSettings || {
-    account_name: 'Media Sosial ReyLan',
-    is_verified: true,
-    bio: 'Selamat datang di halaman profil resmi ReyLan. Hubungkan diri Anda dengan saya melalui media sosial di bawah!',
-    profile_photo_url: 'https://picsum.photos/seed/reylan_profile/150/150',
-    favicon_url: null,
-    background_url: 'https://picsum.photos/seed/reylan_bg/1920/1080',
-    background_type: 'image' as const,
-    backsound_url: null,
-    backsound_volume: 50,
-    backsound_enabled: true,
-    footer_text: '© 2026 ReyLan. All rights reserved.',
-    tagline_text: 'OFFICIAL LINK-IN-BIO',
-    profile_glow_mode: 'solid',
-    profile_glow_color_start: '#8083ff',
-    profile_glow_color_end: '#ffb0cd',
-    profile_glow_direction: 'radial',
-    disable_zoom: false,
-    disable_scroll: false,
-    disable_image_save: false,
-    disable_text_select: false,
-    disable_pull_refresh: false,
-    disable_link_preview: false,
-  };
+  const settings = React.useMemo(() => {
+    return initialSettings || {
+      account_name: 'Media Sosial ReyLan',
+      is_verified: true,
+      bio: 'Selamat datang di halaman profil resmi ReyLan. Hubungkan diri Anda dengan saya melalui media sosial di bawah!',
+      profile_photo_url: 'https://picsum.photos/seed/reylan_profile/150/150',
+      favicon_url: null,
+      background_url: 'https://picsum.photos/seed/reylan_bg/1920/1080',
+      background_type: 'image' as const,
+      backsound_url: null,
+      backsound_volume: 50,
+      backsound_enabled: true,
+      footer_text: '© 2026 ReyLan. All rights reserved.',
+      tagline_text: 'OFFICIAL LINK-IN-BIO',
+      profile_glow_mode: 'solid',
+      profile_glow_color_start: '#8083ff',
+      profile_glow_color_end: '#ffb0cd',
+      profile_glow_direction: 'radial',
+      disable_zoom: false,
+      disable_scroll: false,
+      disable_image_save: false,
+      disable_text_select: false,
+      disable_pull_refresh: false,
+      disable_link_preview: false,
+    };
+  }, [initialSettings]);
 
   // Mematikan fungsionalitas interaksi secara dinamis dan independen berdasarkan opsi admin
   React.useEffect(() => {
     // 1. Zoom lock (disable_zoom)
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+
+    let lastTouchEnd = 0;
+    const handleTouchEnd = (e: TouchEvent) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) {
+        e.preventDefault();
+      }
+      lastTouchEnd = now;
+    };
+
+    const handleGestureStart = (e: Event) => {
+      e.preventDefault();
+    };
+
+    const meta = document.querySelector('meta[name="viewport"]');
     if (settings.disable_zoom) {
-      const meta = document.querySelector('meta[name="viewport"]');
       if (meta) {
         meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+      }
+      document.addEventListener('touchstart', handleTouchStart, { passive: false });
+      document.addEventListener('touchend', handleTouchEnd, { passive: false });
+      document.addEventListener('gesturestart', handleGestureStart, { passive: false });
+    } else {
+      if (meta) {
+        meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
       }
     }
 
     // 2. Scroll lock (disable_scroll)
+    const preventTouchMove = (e: TouchEvent) => {
+      if (settings.disable_scroll) {
+        const target = e.target as HTMLElement;
+        if (target.closest('.scrollable-content')) {
+          return; // Izinkan scroll dalam area bento jika diizinkan
+        }
+        e.preventDefault();
+      }
+    };
+
     if (settings.disable_scroll) {
       document.body.style.overflow = 'hidden';
       document.body.style.overscrollBehavior = 'none';
+      document.documentElement.style.overflow = 'hidden';
+      document.documentElement.style.overscrollBehavior = 'none';
+      document.addEventListener('touchmove', preventTouchMove, { passive: false });
     } else {
       document.body.style.overflow = '';
       document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.overscrollBehavior = '';
     }
 
     // 3. Klik kanan / long-press pada gambar (disable_image_save) & long-press preview link (disable_link_preview)
@@ -97,29 +140,23 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
       document.body.style.overscrollBehaviorY = '';
     }
 
-    // Touchmove prevent jika scroll dikunci secara global
-    const preventTouchMove = (e: TouchEvent) => {
-      if (settings.disable_scroll) {
-        const target = e.target as HTMLElement;
-        if (target.closest('.scrollable-content')) {
-          return; // Izinkan scroll dalam area bento jika diizinkan
-        }
-        e.preventDefault();
-      }
-    };
-
     document.addEventListener('contextmenu', handleGlobalContextMenu);
     document.addEventListener('selectstart', handleSelectStart);
     document.addEventListener('dragstart', handleDragStart);
-    document.addEventListener('touchmove', preventTouchMove, { passive: false });
 
     return () => {
       document.removeEventListener('contextmenu', handleGlobalContextMenu);
       document.removeEventListener('selectstart', handleSelectStart);
       document.removeEventListener('dragstart', handleDragStart);
       document.removeEventListener('touchmove', preventTouchMove);
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('gesturestart', handleGestureStart);
+      
       document.body.style.overflow = '';
       document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.overscrollBehavior = '';
       document.documentElement.style.overscrollBehaviorY = '';
       document.body.style.overscrollBehaviorY = '';
     };
@@ -195,7 +232,48 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
   };
 
   return (
-    <div className="fixed inset-0 h-screen w-screen overflow-hidden flex flex-col items-center justify-between p-6 text-white font-sans select-none overscroll-none touch-none">
+    <div className={`fixed inset-0 h-screen w-screen overflow-hidden flex flex-col items-center justify-between p-6 text-white font-sans transition-all duration-300 ${
+      settings.disable_scroll ? 'touch-none' : ''
+    }`}>
+      {/* Dynamic Security/Interaction Style Injector */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        ${settings.disable_text_select ? `
+          body, html, .scrollable-content, .scrollable-content * {
+            -webkit-user-select: none !important;
+            user-select: none !important;
+          }
+          input, textarea {
+            -webkit-user-select: text !important;
+            user-select: text !important;
+          }
+        ` : `
+          body, html, .scrollable-content, .scrollable-content * {
+            -webkit-user-select: text !important;
+            user-select: text !important;
+          }
+        `}
+        ${settings.disable_image_save ? `
+          img {
+            -webkit-touch-callout: none !important;
+            -webkit-user-drag: none !important;
+          }
+        ` : `
+          img {
+            -webkit-touch-callout: default !important;
+            -webkit-user-drag: auto !important;
+          }
+        `}
+        ${settings.disable_link_preview ? `
+          a, button, [role="button"] {
+            -webkit-touch-callout: none !important;
+          }
+        ` : `
+          a, button, [role="button"] {
+            -webkit-touch-callout: default !important;
+          }
+        `}
+      `}} />
+
       {/* Latar Belakang Dinamis */}
       <BackgroundMedia url={settings.background_url} type={settings.background_type} />
 
@@ -217,7 +295,6 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
             animate={{ opacity: 1, scale: 1 }}
             transition={{ type: 'spring', stiffness: 120, delay: 0.1 }}
             className="relative group"
-            onContextMenu={(e) => e.preventDefault()}
           >
             {/* Glow Ring Effect Dinamis */}
             <div 
@@ -231,10 +308,8 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
                 <img
                   src={settings.profile_photo_url}
                   alt={settings.account_name}
-                  className="w-full h-full object-cover rounded-full select-none"
+                  className="w-full h-full object-cover rounded-full"
                   referrerPolicy="no-referrer"
-                  draggable={false}
-                  onContextMenu={(e) => e.preventDefault()}
                 />
               ) : (
                 <div className="w-full h-full rounded-full bg-slate-800 flex items-center justify-center">
@@ -302,8 +377,6 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
                 href={btn.target_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                draggable={false}
-                onContextMenu={(e) => e.preventDefault()}
                 className="group relative flex items-center justify-between p-3.5 rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-md hover:bg-white/[0.08] hover:border-white/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-lg cursor-pointer"
               >
                 {/* Highlight Hover Effect */}
@@ -317,8 +390,6 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
                       alt={btn.platform_name}
                       className="w-full h-full object-cover rounded-lg group-hover:scale-110 transition-transform duration-300"
                       referrerPolicy="no-referrer"
-                      draggable={false}
-                      onContextMenu={(e) => e.preventDefault()}
                     />
                   </div>
 
