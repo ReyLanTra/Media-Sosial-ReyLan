@@ -49,22 +49,41 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
   React.useEffect(() => {
     // 1. Zoom lock (disable_zoom)
     const handleTouchStart = (e: TouchEvent) => {
-      if (e.touches.length > 1) {
+      if (settings.disable_zoom && e.touches.length > 1) {
         e.preventDefault();
       }
     };
 
     let lastTouchEnd = 0;
     const handleTouchEnd = (e: TouchEvent) => {
-      const now = Date.now();
-      if (now - lastTouchEnd <= 300) {
-        e.preventDefault();
+      if (settings.disable_zoom) {
+        const now = Date.now();
+        if (now - lastTouchEnd <= 300) {
+          e.preventDefault();
+        }
+        lastTouchEnd = now;
       }
-      lastTouchEnd = now;
     };
 
     const handleGestureStart = (e: Event) => {
-      e.preventDefault();
+      if (settings.disable_zoom) {
+        e.preventDefault();
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (settings.disable_zoom && e.ctrlKey) {
+        e.preventDefault();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (settings.disable_zoom && e.ctrlKey && (
+        e.key === '=' || e.key === '-' || e.key === '0' || e.key === '+' ||
+        e.code === 'Equal' || e.code === 'Minus' || e.code === 'Digit0'
+      )) {
+        e.preventDefault();
+      }
     };
 
     const meta = document.querySelector('meta[name="viewport"]');
@@ -72,17 +91,18 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
       if (meta) {
         meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
       }
-      document.addEventListener('touchstart', handleTouchStart, { passive: false });
-      document.addEventListener('touchend', handleTouchEnd, { passive: false });
-      document.addEventListener('gesturestart', handleGestureStart, { passive: false });
     } else {
       if (meta) {
         meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
       }
     }
 
-    // 2. Scroll lock (disable_scroll)
+    // 2. Scroll lock & Zoom lock combined touchmove handler
     const preventTouchMove = (e: TouchEvent) => {
+      if (settings.disable_zoom && e.touches.length > 1) {
+        e.preventDefault();
+        return;
+      }
       if (settings.disable_scroll) {
         const target = e.target as HTMLElement;
         if (target.closest('.scrollable-content')) {
@@ -97,7 +117,6 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
       document.body.style.overscrollBehavior = 'none';
       document.documentElement.style.overflow = 'hidden';
       document.documentElement.style.overscrollBehavior = 'none';
-      document.addEventListener('touchmove', preventTouchMove, { passive: false });
     } else {
       document.body.style.overflow = '';
       document.body.style.overscrollBehavior = '';
@@ -140,18 +159,26 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
       document.body.style.overscrollBehaviorY = '';
     }
 
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', preventTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('gesturestart', handleGestureStart, { passive: false });
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('keydown', handleKeyDown, { passive: false });
     document.addEventListener('contextmenu', handleGlobalContextMenu);
     document.addEventListener('selectstart', handleSelectStart);
     document.addEventListener('dragstart', handleDragStart);
 
     return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', preventTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('gesturestart', handleGestureStart);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('contextmenu', handleGlobalContextMenu);
       document.removeEventListener('selectstart', handleSelectStart);
       document.removeEventListener('dragstart', handleDragStart);
-      document.removeEventListener('touchmove', preventTouchMove);
-      document.removeEventListener('touchstart', handleTouchStart);
-      document.removeEventListener('touchend', handleTouchEnd);
-      document.removeEventListener('gesturestart', handleGestureStart);
       
       document.body.style.overflow = '';
       document.body.style.overscrollBehavior = '';
@@ -254,11 +281,13 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
         `}
         ${settings.disable_image_save ? `
           img {
+            pointer-events: none !important;
             -webkit-touch-callout: none !important;
             -webkit-user-drag: none !important;
           }
         ` : `
           img {
+            pointer-events: auto !important;
             -webkit-touch-callout: default !important;
             -webkit-user-drag: auto !important;
           }
@@ -270,6 +299,17 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
         ` : `
           a, button, [role="button"] {
             -webkit-touch-callout: default !important;
+          }
+        `}
+        ${settings.disable_pull_refresh ? `
+          body, html {
+            overscroll-behavior-y: none !important;
+            overscroll-behavior: none !important;
+          }
+        ` : `
+          body, html {
+            overscroll-behavior-y: auto !important;
+            overscroll-behavior: auto !important;
           }
         `}
       `}} />
