@@ -8,9 +8,13 @@ import {
   deleteBgImage, 
   addTrack, 
   deleteTrack, 
-  reorderTracks 
+  reorderTracks,
+  reorderBgImages,
+  updateBgImage,
+  updateMusicTrackAction
 } from '@/app/actions';
 import { SiteSettings, BackgroundImage, MusicTrack } from '@/lib/db';
+import { handleUpload } from '@/lib/supabase';
 import { 
   Upload, 
   RotateCcw, 
@@ -26,7 +30,9 @@ import {
   GripVertical,
   Monitor,
   Smartphone,
-  Timer
+  Timer,
+  Edit2,
+  ChevronDown
 } from 'lucide-react';
 import { 
   DndContext, 
@@ -36,13 +42,15 @@ import {
   useSensor, 
   useSensors,
   DragEndEvent,
-  DragStartEvent
+  DragStartEvent,
+  defaultDropAnimationSideEffects
 } from '@dnd-kit/core';
 import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
+  rectSortingStrategy,
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -55,7 +63,15 @@ interface LatarMusikClientProps {
 }
 
 // Komponen Item Musik yang bisa di-drag
-function SortableMusicItem({ track, onDelete }: { track: MusicTrack; onDelete: (id: string, url: string) => void }) {
+function SortableMusicItem({ 
+  track, 
+  onDelete, 
+  onUpdateTitle 
+}: { 
+  track: MusicTrack; 
+  onDelete: (id: string) => void;
+  onUpdateTitle: (id: string, title: string) => void;
+}) {
   const {
     attributes,
     listeners,
@@ -80,16 +96,93 @@ function SortableMusicItem({ track, onDelete }: { track: MusicTrack; onDelete: (
       <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-slate-500 hover:text-slate-300 transition-colors">
         <GripVertical className="w-4 h-4" />
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-semibold text-slate-200 truncate">{track.title || 'Tanpa Judul'}</p>
-        <p className="text-[9px] text-slate-500 truncate">{track.audio_url.split('/').pop()}</p>
+      <div className="flex-1 min-w-0 space-y-1">
+        <input 
+          type="text"
+          value={track.title || ''}
+          onChange={(e) => onUpdateTitle(track.id, e.target.value)}
+          placeholder="Judul Lagu..."
+          className="w-full bg-transparent border-none p-0 text-xs font-semibold text-slate-200 focus:ring-0 placeholder:text-slate-600"
+        />
+        <p className="text-[9px] text-slate-500 truncate">{track.audio_url.startsWith('blob:') ? 'File Baru (Belum Diunggah)' : track.audio_url.split('/').pop()}</p>
       </div>
       <button 
-        onClick={() => onDelete(track.id, track.audio_url)}
+        onClick={() => onDelete(track.id)}
         className="p-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>
+    </div>
+  );
+}
+
+// Komponen Item Gambar yang bisa di-drag
+function SortableBgItem({ 
+  img, 
+  device,
+  onDelete, 
+  onReplace 
+}: { 
+  img: BackgroundImage; 
+  device: 'mobile' | 'desktop';
+  onDelete: (id: string) => void;
+  onReplace: (id: string, file: File) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: img.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style}
+      className={`relative aspect-[9/16] ${device === 'desktop' ? 'aspect-video' : 'aspect-[9/16]'} rounded-lg overflow-hidden border group bg-black/20 transition-colors
+        ${isDragging ? 'shadow-xl shadow-black/50 border-settings-accent/50 opacity-80' : 'border-white/10'}
+      `}
+    >
+      <img src={img.image_url} alt="Bg Item" className="w-full h-full object-cover" />
+      
+      {/* Drag Handle Overlay */}
+      <div 
+        {...attributes} 
+        {...listeners} 
+        className="absolute inset-0 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/40 transition-opacity"
+      >
+        <GripVertical className="w-8 h-8 text-white/50" />
+      </div>
+
+      {/* Action Buttons */}
+      <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <label className="p-1.5 rounded-full bg-blue-500/80 text-white cursor-pointer hover:bg-blue-600 transition-colors">
+          <input 
+            type="file" 
+            accept="image/*" 
+            className="hidden" 
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onReplace(img.id, file);
+            }} 
+          />
+          <Edit2 className="w-3 h-3" />
+        </label>
+        <button 
+          onClick={() => onDelete(img.id)}
+          className="p-1.5 rounded-full bg-red-500/80 text-white hover:bg-red-600 transition-colors"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -105,13 +198,32 @@ export default function LatarMusikClient({
   const [desktopBgImages, setDesktopBgImages] = React.useState<BackgroundImage[]>(initialDesktopBgImages);
   const [tracks, setTracks] = React.useState<MusicTrack[]>(initialTracks);
 
-  // Upload Loading States
-  const [uploadingMobile, setUploadingMobile] = React.useState(false);
-  const [uploadingDesktop, setUploadingDesktop] = React.useState(false);
-  const [uploadingMusic, setUploadingMusic] = React.useState(false);
+  // Draft Management for Files
+  const [newMobileFiles, setNewMobileFiles] = React.useState<{ [id: string]: File }>({});
+  const [newDesktopFiles, setNewDesktopFiles] = React.useState<{ [id: string]: File }>({});
+  const [newMusicFiles, setNewMusicFiles] = React.useState<{ [id: string]: File }>({});
+  const [newAnimMobileFile, setNewAnimMobileFile] = React.useState<File | null>(null);
+  const [newAnimDesktopFile, setNewAnimDesktopFile] = React.useState<File | null>(null);
+  
+  const [deletedMobileIds, setDeletedMobileIds] = React.useState<string[]>([]);
+  const [deletedDesktopIds, setDeletedDesktopIds] = React.useState<string[]>([]);
+  const [deletedTrackIds, setDeletedTrackIds] = React.useState<string[]>([]);
+
+  // Local storage URLs for cleanup
+  const localUrls = React.useRef<string[]>([]);
+  const addToCleanup = (url: string) => {
+    if (url.startsWith('blob:')) localUrls.current.push(url);
+  };
+
+  React.useEffect(() => {
+    return () => {
+      localUrls.current.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, []);
 
   const [saveSuccess, setSaveSuccess] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
+  const [dragTarget, setDragTarget] = React.useState<'mobile' | 'desktop' | 'music' | null>(null);
 
   // Scroll lock effect
   React.useEffect(() => {
@@ -131,213 +243,322 @@ export default function LatarMusikClient({
     redo,
     canUndo,
     canRedo,
-    isDirty,
+    isDirty: isSettingsDirty,
     isSaving,
     error,
     reset: resetDraft,
     save: saveDraft,
   } = useSettingsDraft<SiteSettings>(initialSettings, async (currentData) => {
-    // Simpan pengaturan interval dan toggle ke database
+    // 1. Proses Upload Animasi Mobile jika ada
+    let finalMobileUrl = currentData.background_url;
+    let finalMobileType = currentData.background_type;
+    if (newAnimMobileFile) {
+      finalMobileUrl = await handleUpload(newAnimMobileFile, 'background', 'anim');
+      const ext = newAnimMobileFile.name.split('.').pop()?.toLowerCase();
+      finalMobileType = ext === 'mp4' ? 'video' : 'image';
+    }
+
+    // 2. Proses Upload Animasi Desktop jika ada
+    let finalDesktopUrl = currentData.desktop_background_url;
+    let finalDesktopType = currentData.desktop_background_type;
+    if (newAnimDesktopFile) {
+      finalDesktopUrl = await handleUpload(newAnimDesktopFile, 'background-desktop', 'anim');
+      const ext = newAnimDesktopFile.name.split('.').pop()?.toLowerCase();
+      finalDesktopType = ext === 'mp4' ? 'video' : 'image';
+    }
+
+    // 3. Simpan Settings Utama
     await updateSettings({
-      background_type: currentData.background_type,
-      background_url: currentData.background_url,
-      backsound_url: currentData.backsound_url,
-      backsound_volume: currentData.backsound_volume,
-      backsound_enabled: currentData.backsound_enabled,
-      mobile_bg_slideshow_interval: currentData.mobile_bg_slideshow_interval,
-      desktop_bg_slideshow_interval: currentData.desktop_bg_slideshow_interval,
+      ...currentData,
+      background_url: finalMobileUrl,
+      background_type: finalMobileType,
+      desktop_background_url: finalDesktopUrl,
+      desktop_background_type: finalDesktopType,
+      updated_at: new Date().toISOString(),
     });
+
+    // 4. Proses Background Mobile (Add, Delete, Reorder)
+    for (const id of deletedMobileIds) {
+      const img = initialMobileBgImages.find(i => i.id === id);
+      if (img) await deleteBgImage(id, img.image_url, 'mobile');
+    }
+    const finalMobileImgs = [];
+    for (let i = 0; i < mobileBgImages.length; i++) {
+      const img = mobileBgImages[i];
+      let finalUrl = img.image_url;
+      if (newMobileFiles[img.id]) {
+        finalUrl = await handleUpload(newMobileFiles[img.id], 'background', (i + 1).toString());
+      }
+      
+      if (img.id.startsWith('new-') || newMobileFiles[img.id]) {
+        const result = await addBgImage({ device_type: 'mobile', image_url: finalUrl, display_order: i });
+        finalMobileImgs.push(result);
+      } else {
+        await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
+        finalMobileImgs.push({ ...img, display_order: i, image_url: finalUrl });
+      }
+    }
+
+    // 5. Proses Background Desktop (Add, Delete, Reorder)
+    for (const id of deletedDesktopIds) {
+      const img = initialDesktopBgImages.find(i => i.id === id);
+      if (img) await deleteBgImage(id, img.image_url, 'desktop');
+    }
+    const finalDesktopImgs = [];
+    for (let i = 0; i < desktopBgImages.length; i++) {
+      const img = desktopBgImages[i];
+      let finalUrl = img.image_url;
+      if (newDesktopFiles[img.id]) {
+        finalUrl = await handleUpload(newDesktopFiles[img.id], 'background-desktop', (i + 1).toString());
+      }
+
+      if (img.id.startsWith('new-') || newDesktopFiles[img.id]) {
+        const result = await addBgImage({ device_type: 'desktop', image_url: finalUrl, display_order: i });
+        finalDesktopImgs.push(result);
+      } else {
+        await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
+        finalDesktopImgs.push({ ...img, display_order: i, image_url: finalUrl });
+      }
+    }
+
+    // 6. Proses Music Tracks (Add, Delete, Update, Reorder)
+    for (const id of deletedTrackIds) {
+      const track = initialTracks.find(t => t.id === id);
+      if (track) await deleteTrack(id, track.audio_url);
+    }
+    const finalTracks = [];
+    for (let i = 0; i < tracks.length; i++) {
+      const track = tracks[i];
+      let finalUrl = track.audio_url;
+      if (newMusicFiles[track.id]) {
+        finalUrl = await handleUpload(newMusicFiles[track.id], 'backsound', (i + 1).toString());
+      }
+
+      if (track.id.startsWith('new-')) {
+        const result = await addTrack({ title: track.title, audio_url: finalUrl, display_order: i });
+        finalTracks.push(result);
+      } else {
+        await updateMusicTrackAction(track.id, { title: track.title, display_order: i, audio_url: finalUrl });
+        finalTracks.push({ ...track, title: track.title, display_order: i, audio_url: finalUrl });
+      }
+    }
+
+    // Update local state after save
+    setMobileBgImages(finalMobileImgs);
+    setDesktopBgImages(finalDesktopImgs);
+    setTracks(finalTracks);
+    setNewMobileFiles({});
+    setNewDesktopFiles({});
+    setNewMusicFiles({});
+    setNewAnimMobileFile(null);
+    setNewAnimDesktopFile(null);
+    setDeletedMobileIds([]);
+    setDeletedDesktopIds([]);
+    setDeletedTrackIds([]);
 
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   });
 
-  // --- HANDLERS MEDIA ---
+  const isListDirty = 
+    deletedMobileIds.length > 0 || 
+    deletedDesktopIds.length > 0 || 
+    deletedTrackIds.length > 0 ||
+    Object.keys(newMobileFiles).length > 0 ||
+    Object.keys(newDesktopFiles).length > 0 ||
+    Object.keys(newMusicFiles).length > 0 ||
+    newAnimMobileFile !== null ||
+    newAnimDesktopFile !== null ||
+    JSON.stringify(mobileBgImages.map(m => m.id)) !== JSON.stringify(initialMobileBgImages.map(m => m.id)) ||
+    JSON.stringify(desktopBgImages.map(d => d.id)) !== JSON.stringify(initialDesktopBgImages.map(d => d.id)) ||
+    JSON.stringify(tracks.map(t => t.id)) !== JSON.stringify(initialTracks.map(t => t.id)) ||
+    tracks.some((t, i) => t.title !== initialTracks.find(it => it.id === t.id)?.title);
 
-  const handleMobileBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const isDirty = isSettingsDirty || isListDirty;
+
+  // --- HANDLERS MEDIA (DRAFT MODE) ---
+
+  const handleMobileBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Tentukan tipe berdasarkan ekstensi file
     const ext = file.name.split('.').pop()?.toLowerCase();
     const isAnim = ext === 'gif' || ext === 'mp4';
-    const type = ext === 'mp4' ? 'video' : 'image';
+    const localUrl = URL.createObjectURL(file);
+    addToCleanup(localUrl);
 
-    setUploadingMobile(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('bucket', 'background');
-      
-      if (isAnim) {
-        formData.append('customId', 'anim');
-      } else {
-        formData.append('customId', (mobileBgImages.length + 1).toString());
+    if (isAnim) {
+      setNewAnimMobileFile(file);
+      updateData(prev => ({ 
+        ...prev, 
+        background_url: localUrl, 
+        background_type: ext === 'mp4' ? 'video' : 'image' 
+      }));
+    } else {
+      const newId = `new-m-${Date.now()}`;
+      const newImg: BackgroundImage = {
+        id: newId,
+        device_type: 'mobile',
+        image_url: localUrl,
+        display_order: mobileBgImages.length
+      };
+      setNewMobileFiles(prev => ({ ...prev, [newId]: file }));
+      setMobileBgImages([...mobileBgImages, newImg]);
+      if (settings.background_type !== 'image') {
+        updateData(prev => ({ ...prev, background_type: 'image' }));
       }
-      
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const resData = await res.json();
-      if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah media.');
+    }
+    e.target.value = '';
+  };
 
-      if (isAnim) {
-        // Jika animasi, update settings utama
-        updateData(prev => ({ 
-          ...prev,
-          background_url: resData.url,
-          background_type: type
-        }));
-      } else {
-        // Jika gambar, tambahkan ke slideshow
-        const newImg = await addBgImage({
-          device_type: 'mobile',
-          image_url: resData.url,
-          display_order: mobileBgImages.length
-        });
-        setMobileBgImages([...mobileBgImages, newImg]);
-        // Pastikan tipe di-set ke image (slideshow)
-        if (settings?.background_type !== 'image') {
-          updateData(prev => ({ ...prev, background_type: 'image' }));
-        }
+  const handleDesktopBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const isAnim = ext === 'gif' || ext === 'mp4';
+    const localUrl = URL.createObjectURL(file);
+    addToCleanup(localUrl);
+
+    if (isAnim) {
+      setNewAnimDesktopFile(file);
+      updateData(prev => ({ 
+        ...prev, 
+        desktop_background_url: localUrl, 
+        desktop_background_type: ext === 'mp4' ? 'video' : 'image' 
+      }));
+    } else {
+      const newId = `new-d-${Date.now()}`;
+      const newImg: BackgroundImage = {
+        id: newId,
+        device_type: 'desktop',
+        image_url: localUrl,
+        display_order: desktopBgImages.length
+      };
+      setNewDesktopFiles(prev => ({ ...prev, [newId]: file }));
+      setDesktopBgImages([...desktopBgImages, newImg]);
+      if (settings.desktop_background_type !== 'image') {
+        updateData(prev => ({ ...prev, desktop_background_type: 'image' }));
       }
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setUploadingMobile(false);
-      if (e.target) e.target.value = '';
+    }
+    e.target.value = '';
+  };
+
+  const handleMusicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const localUrl = URL.createObjectURL(file);
+    addToCleanup(localUrl);
+    const newId = `new-s-${Date.now()}`;
+    const newTrack: MusicTrack = {
+      id: newId,
+      title: file.name.replace(/\.[^/.]+$/, ""),
+      audio_url: localUrl,
+      display_order: tracks.length
+    };
+    setNewMusicFiles(prev => ({ ...prev, [newId]: file }));
+    setTracks([...tracks, newTrack]);
+    e.target.value = '';
+  };
+
+  const handleReplaceBg = (id: string, file: File, device: 'mobile' | 'desktop') => {
+    const localUrl = URL.createObjectURL(file);
+    addToCleanup(localUrl);
+    if (device === 'mobile') {
+      setNewMobileFiles(prev => ({ ...prev, [id]: file }));
+      setMobileBgImages(prev => prev.map(img => img.id === id ? { ...img, image_url: localUrl } : img));
+    } else {
+      setNewDesktopFiles(prev => ({ ...prev, [id]: file }));
+      setDesktopBgImages(prev => prev.map(img => img.id === id ? { ...img, image_url: localUrl } : img));
     }
   };
 
-  const handleDesktopBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Tentukan tipe berdasarkan ekstensi file
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    const isAnim = ext === 'gif' || ext === 'mp4';
-    const type = ext === 'mp4' ? 'video' : 'image';
-
-    setUploadingDesktop(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('bucket', 'background-desktop');
-      
-      if (isAnim) {
-        formData.append('customId', 'anim');
-      } else {
-        formData.append('customId', (desktopBgImages.length + 1).toString());
-      }
-
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const resData = await res.json();
-      if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah media.');
-
-      if (isAnim) {
-        // Jika animasi, update settings desktop
-        updateData(prev => ({ 
-          ...prev,
-          desktop_background_url: resData.url,
-          desktop_background_type: type
-        }));
-      } else {
-        // Jika gambar, tambahkan ke slideshow
-        const newImg = await addBgImage({
-          device_type: 'desktop',
-          image_url: resData.url,
-          display_order: desktopBgImages.length
-        });
-        setDesktopBgImages([...desktopBgImages, newImg]);
-        // Pastikan tipe desktop di-set ke image (slideshow)
-        if (settings?.desktop_background_type !== 'image') {
-          updateData(prev => ({ ...prev, desktop_background_type: 'image' }));
-        }
-      }
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setUploadingDesktop(false);
-      if (e.target) e.target.value = '';
-    }
-  };
-
-  const handleMusicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploadingMusic(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('bucket', 'backsound');
-      formData.append('customId', (tracks.length + 1).toString());
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const resData = await res.json();
-      if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah musik.');
-
-      const newTrack = await addTrack({
-        title: file.name.replace(/\.[^/.]+$/, ""), // Ambil nama file tanpa ekstensi
-        audio_url: resData.url,
-        display_order: tracks.length
+  const handleDeleteBg = (id: string, device: 'mobile' | 'desktop') => {
+    if (device === 'mobile') {
+      setMobileBgImages(prev => prev.filter(img => img.id !== id));
+      if (!id.startsWith('new-')) setDeletedMobileIds(prev => [...prev, id]);
+      setNewMobileFiles(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
       });
-      setTracks([...tracks, newTrack]);
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setUploadingMusic(false);
+    } else {
+      setDesktopBgImages(prev => prev.filter(img => img.id !== id));
+      if (!id.startsWith('new-')) setDeletedDesktopIds(prev => [...prev, id]);
+      setNewDesktopFiles(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
     }
   };
 
-  const handleDeleteBg = async (id: string, url: string, device: 'mobile' | 'desktop') => {
-    if (!confirm('Hapus gambar ini?')) return;
-    try {
-      await deleteBgImage(id, url, device);
-      if (device === 'mobile') {
-        setMobileBgImages(mobileBgImages.filter(img => img.id !== id));
-      } else {
-        setDesktopBgImages(desktopBgImages.filter(img => img.id !== id));
-      }
-    } catch (err: any) {
-      alert('Gagal menghapus gambar.');
-    }
+  const handleDeleteTrack = (id: string) => {
+    setTracks(prev => prev.filter(t => t.id !== id));
+    if (!id.startsWith('new-')) setDeletedTrackIds(prev => [...prev, id]);
+    setNewMusicFiles(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
-  const handleDeleteTrack = async (id: string, url: string) => {
-    if (!confirm('Hapus lagu dari playlist?')) return;
-    try {
-      await deleteTrack(id, url);
-      setTracks(tracks.filter(t => t.id !== id));
-    } catch (err: any) {
-      alert('Gagal menghapus lagu.');
-    }
+  const handleUpdateTrackTitle = (id: string, title: string) => {
+    setTracks(prev => prev.map(t => t.id === id ? { ...t, title } : t));
+  };
+
+  const resetAll = () => {
+    resetDraft();
+    setMobileBgImages(initialMobileBgImages);
+    setDesktopBgImages(initialDesktopBgImages);
+    setTracks(initialTracks);
+    setNewMobileFiles({});
+    setNewDesktopFiles({});
+    setNewMusicFiles({});
+    setNewAnimMobileFile(null);
+    setNewAnimDesktopFile(null);
+    setDeletedMobileIds([]);
+    setDeletedDesktopIds([]);
+    setDeletedTrackIds([]);
+    localUrls.current.forEach(url => URL.revokeObjectURL(url));
+    localUrls.current = [];
   };
 
   // --- DRAG & DROP LOGIC ---
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
     setIsDragging(true);
+    if (tracks.some(t => t.id === active.id)) setDragTarget('music');
+    else if (mobileBgImages.some(m => m.id === active.id)) setDragTarget('mobile');
+    else if (desktopBgImages.some(d => d.id === active.id)) setDragTarget('desktop');
   };
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setIsDragging(false);
+    setDragTarget(null);
 
     if (over && active.id !== over.id) {
-      const oldIndex = tracks.findIndex(t => t.id === active.id);
-      const newIndex = tracks.findIndex(t => t.id === over.id);
-
-      const newTracks = arrayMove(tracks, oldIndex, newIndex);
-      setTracks(newTracks);
-
-      // Update urutan di database
-      const updates = newTracks.map((t, i) => ({ id: t.id, display_order: i }));
-      await reorderTracks(updates);
+      if (dragTarget === 'music') {
+        const oldIdx = tracks.findIndex(t => t.id === active.id);
+        const newIdx = tracks.findIndex(t => t.id === over.id);
+        setTracks(arrayMove(tracks, oldIdx, newIdx));
+      } else if (dragTarget === 'mobile') {
+        const oldIdx = mobileBgImages.findIndex(m => m.id === active.id);
+        const newIdx = mobileBgImages.findIndex(m => m.id === over.id);
+        setMobileBgImages(arrayMove(mobileBgImages, oldIdx, newIdx));
+      } else if (dragTarget === 'desktop') {
+        const oldIdx = desktopBgImages.findIndex(d => d.id === active.id);
+        const newIdx = desktopBgImages.findIndex(d => d.id === over.id);
+        setDesktopBgImages(arrayMove(desktopBgImages, oldIdx, newIdx));
+      }
     }
   };
 
@@ -384,7 +605,7 @@ export default function LatarMusikClient({
 
           {/* Batal */}
           <button
-            onClick={resetDraft}
+            onClick={resetAll}
             disabled={!isDirty || isSaving}
             className="px-4 h-10 rounded-xl border border-red-500/20 text-red-400 hover:bg-red-500/10 hover:border-red-500/30 text-xs font-semibold disabled:opacity-30 disabled:pointer-events-none transition-all duration-200 flex items-center gap-1.5"
           >
@@ -439,49 +660,76 @@ export default function LatarMusikClient({
             </div>
 
             {/* Slideshow Interval Mobile */}
-            <div className="space-y-2 p-4 rounded-xl border border-white/5 bg-black/10">
-              <div className="flex justify-between items-center text-xs text-slate-300 font-semibold">
-                <div className="flex items-center gap-1.5">
-                  <Timer className="w-3.5 h-3.5" />
-                  <span>INTERVAL SLIDESHOW (DETIK)</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2 p-4 rounded-xl border border-white/5 bg-black/10">
+                <div className="flex justify-between items-center text-xs text-slate-300 font-semibold">
+                  <div className="flex items-center gap-1.5">
+                    <Timer className="w-3.5 h-3.5" />
+                    <span>INTERVAL SLIDESHOW (DETIK)</span>
+                  </div>
+                  <span className="font-mono text-settings-accent">{settings.mobile_bg_slideshow_interval}s</span>
                 </div>
-                <span className="font-mono text-settings-accent">{settings.mobile_bg_slideshow_interval}s</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="30"
+                  value={settings.mobile_bg_slideshow_interval}
+                  onChange={(e) => updateData(prev => ({ ...prev, mobile_bg_slideshow_interval: parseInt(e.target.value) }))}
+                  className="w-full h-1.5 bg-neutral-950 rounded-lg appearance-none cursor-pointer accent-settings-accent"
+                />
               </div>
-              <input
-                type="range"
-                min="1"
-                max="30"
-                value={settings.mobile_bg_slideshow_interval}
-                onChange={(e) => updateData(prev => ({ ...prev, mobile_bg_slideshow_interval: parseInt(e.target.value) }))}
-                className="w-full h-1.5 bg-neutral-950 rounded-lg appearance-none cursor-pointer accent-settings-accent"
-              />
+
+              <div className="space-y-2 p-4 rounded-xl border border-white/5 bg-black/10">
+                <div className="flex justify-between items-center text-xs text-slate-300 font-semibold">
+                  <div className="flex items-center gap-1.5">
+                    <RotateCw className="w-3.5 h-3.5" />
+                    <span>ANIMASI TRANSISI MOBILE</span>
+                  </div>
+                </div>
+                <div className="relative">
+                  <select
+                    value={settings.mobile_bg_transition}
+                    onChange={(e) => updateData(prev => ({ ...prev, mobile_bg_transition: e.target.value as any }))}
+                    className="w-full bg-neutral-950 border border-white/10 rounded-lg py-2 px-3 text-xs text-slate-200 appearance-none focus:ring-1 focus:ring-settings-accent/50 outline-none"
+                  >
+                    <option value="fade">Fade (Memudar)</option>
+                    <option value="slide">Slide (Geser)</option>
+                    <option value="zoom">Zoom (Pembesaran)</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-2.5 w-3 h-3 text-slate-500 pointer-events-none" />
+                </div>
+              </div>
             </div>
 
             {/* Gallery Mobile */}
-            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-              {mobileBgImages.map((img) => (
-                <div key={img.id} className="relative aspect-[9/16] rounded-lg overflow-hidden border border-white/10 group bg-black/20">
-                  <img src={img.image_url} alt="Mobile Bg" className="w-full h-full object-cover" />
-                  <button 
-                    onClick={() => handleDeleteBg(img.id, img.image_url, 'mobile')}
-                    className="absolute top-1 right-1 p-1.5 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-              <label className={`flex flex-col items-center justify-center aspect-[9/16] rounded-lg border border-dashed border-white/20 hover:border-white/40 bg-white/5 cursor-pointer transition-all hover:bg-white/10 ${uploadingMobile ? 'opacity-50 pointer-events-none' : ''}`}>
-                <input type="file" accept="image/*,video/mp4" onChange={handleMobileBgUpload} className="hidden" />
-                {uploadingMobile ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={mobileBgImages.map(m => m.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                  {mobileBgImages.map((img) => (
+                    <SortableBgItem 
+                      key={img.id} 
+                      img={img} 
+                      device="mobile"
+                      onDelete={(id) => handleDeleteBg(id, 'mobile')}
+                      onReplace={(id, file) => handleReplaceBg(id, file, 'mobile')}
+                    />
+                  ))}
+                  <label className={`flex flex-col items-center justify-center aspect-[9/16] rounded-lg border border-dashed border-white/20 hover:border-white/40 bg-white/5 cursor-pointer transition-all hover:bg-white/10 ${isSaving ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <input type="file" accept="image/*" onChange={handleMobileBgUpload} className="hidden" />
                     <Plus className="w-5 h-5 text-slate-400" />
-                    <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter text-center px-1">Unggah (PNG/GIF/MP4)</span>
-                  </>
-                )}
-              </label>
-            </div>
+                    <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter text-center px-1">Tambah Gambar</span>
+                  </label>
+                </div>
+              </SortableContext>
+            </DndContext>
 
             {/* Preview Animated Mobile */}
             {(settings.background_type === 'gif' || settings.background_type === 'video') && settings.background_url && (
@@ -517,49 +765,76 @@ export default function LatarMusikClient({
             </p>
 
             {/* Slideshow Interval Desktop */}
-            <div className="space-y-2 p-4 rounded-xl border border-white/5 bg-black/10">
-              <div className="flex justify-between items-center text-xs text-slate-300 font-semibold">
-                <div className="flex items-center gap-1.5">
-                  <Timer className="w-3.5 h-3.5" />
-                  <span>INTERVAL SLIDESHOW (DETIK)</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2 p-4 rounded-xl border border-white/5 bg-black/10">
+                <div className="flex justify-between items-center text-xs text-slate-300 font-semibold">
+                  <div className="flex items-center gap-1.5">
+                    <Timer className="w-3.5 h-3.5" />
+                    <span>INTERVAL SLIDESHOW (DETIK)</span>
+                  </div>
+                  <span className="font-mono text-settings-accent">{settings.desktop_bg_slideshow_interval}s</span>
                 </div>
-                <span className="font-mono text-settings-accent">{settings.desktop_bg_slideshow_interval}s</span>
+                <input
+                  type="range"
+                  min="1"
+                  max="30"
+                  value={settings.desktop_bg_slideshow_interval}
+                  onChange={(e) => updateData(prev => ({ ...prev, desktop_bg_slideshow_interval: parseInt(e.target.value) }))}
+                  className="w-full h-1.5 bg-neutral-950 rounded-lg appearance-none cursor-pointer accent-settings-accent"
+                />
               </div>
-              <input
-                type="range"
-                min="1"
-                max="30"
-                value={settings.desktop_bg_slideshow_interval}
-                onChange={(e) => updateData(prev => ({ ...prev, desktop_bg_slideshow_interval: parseInt(e.target.value) }))}
-                className="w-full h-1.5 bg-neutral-950 rounded-lg appearance-none cursor-pointer accent-settings-accent"
-              />
+
+              <div className="space-y-2 p-4 rounded-xl border border-white/5 bg-black/10">
+                <div className="flex justify-between items-center text-xs text-slate-300 font-semibold">
+                  <div className="flex items-center gap-1.5">
+                    <RotateCw className="w-3.5 h-3.5" />
+                    <span>ANIMASI TRANSISI DESKTOP</span>
+                  </div>
+                </div>
+                <div className="relative">
+                  <select
+                    value={settings.desktop_bg_transition}
+                    onChange={(e) => updateData(prev => ({ ...prev, desktop_bg_transition: e.target.value as any }))}
+                    className="w-full bg-neutral-950 border border-white/10 rounded-lg py-2 px-3 text-xs text-slate-200 appearance-none focus:ring-1 focus:ring-settings-accent/50 outline-none"
+                  >
+                    <option value="fade">Fade (Memudar)</option>
+                    <option value="slide">Slide (Geser)</option>
+                    <option value="zoom">Zoom (Pembesaran)</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-2.5 w-3 h-3 text-slate-500 pointer-events-none" />
+                </div>
+              </div>
             </div>
 
             {/* Gallery Desktop */}
-            <div className="grid grid-cols-2 gap-3">
-              {desktopBgImages.map((img) => (
-                <div key={img.id} className="relative aspect-video rounded-lg overflow-hidden border border-white/10 group bg-black/20">
-                  <img src={img.image_url} alt="Desktop Bg" className="w-full h-full object-cover" />
-                  <button 
-                    onClick={() => handleDeleteBg(img.id, img.image_url, 'desktop')}
-                    className="absolute top-1 right-1 p-1.5 rounded-full bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-              <label className={`flex flex-col items-center justify-center aspect-video rounded-lg border border-dashed border-white/20 hover:border-white/40 bg-white/5 cursor-pointer transition-all hover:bg-white/10 ${uploadingDesktop ? 'opacity-50 pointer-events-none' : ''}`}>
-                <input type="file" accept="image/*,video/mp4" onChange={handleDesktopBgUpload} className="hidden" />
-                {uploadingDesktop ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={desktopBgImages.map(d => d.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  {desktopBgImages.map((img) => (
+                    <SortableBgItem 
+                      key={img.id} 
+                      img={img} 
+                      device="desktop"
+                      onDelete={(id) => handleDeleteBg(id, 'desktop')}
+                      onReplace={(id, file) => handleReplaceBg(id, file, 'desktop')}
+                    />
+                  ))}
+                  <label className={`flex flex-col items-center justify-center aspect-video rounded-lg border border-dashed border-white/20 hover:border-white/40 bg-white/5 cursor-pointer transition-all hover:bg-white/10 ${isSaving ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <input type="file" accept="image/*" onChange={handleDesktopBgUpload} className="hidden" />
                     <Plus className="w-5 h-5 text-slate-400" />
-                    <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">Unggah (PNG/GIF/MP4)</span>
-                  </>
-                )}
-              </label>
-            </div>
+                    <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">Tambah Desktop PNG</span>
+                  </label>
+                </div>
+              </SortableContext>
+            </DndContext>
 
             {/* Preview Animated Desktop */}
             {(settings.desktop_background_type === 'gif' || settings.desktop_background_type === 'video') && settings.desktop_background_url && (
@@ -621,14 +896,14 @@ export default function LatarMusikClient({
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
                 <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400">DAFTAR PUTAR (URUTKAN)</label>
-                <label className={`text-[10px] flex items-center gap-1 font-bold text-blue-400 cursor-pointer hover:text-blue-300 transition-colors ${uploadingMusic ? 'opacity-50 pointer-events-none' : ''}`}>
+                <label className={`text-[10px] flex items-center gap-1 font-bold text-blue-400 cursor-pointer hover:text-blue-300 transition-colors ${isSaving ? 'opacity-50 pointer-events-none' : ''}`}>
                   <input type="file" accept="audio/mpeg" onChange={handleMusicUpload} className="hidden" />
                   <Plus className="w-3 h-3" />
                   <span>TAMBAH MP3</span>
                 </label>
               </div>
 
-              {uploadingMusic && (
+              {isSaving && Object.keys(newMusicFiles).length > 0 && (
                 <div className="p-3 rounded-xl border border-dashed border-blue-500/20 bg-blue-500/5 flex items-center justify-center gap-2">
                   <div className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
                   <span className="text-[10px] text-blue-400 font-bold uppercase">Mengunggah Musik...</span>
@@ -657,6 +932,7 @@ export default function LatarMusikClient({
                           key={track.id} 
                           track={track} 
                           onDelete={handleDeleteTrack} 
+                          onUpdateTitle={handleUpdateTrackTitle}
                         />
                       ))}
                     </div>

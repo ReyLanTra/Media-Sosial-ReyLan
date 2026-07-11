@@ -48,6 +48,33 @@ export interface SiteSettings {
   allow_mobile_access: boolean;
   mobile_bg_slideshow_interval: number;
   desktop_bg_slideshow_interval: number;
+  mobile_bg_transition: 'fade' | 'slide' | 'zoom';
+  desktop_bg_transition: 'fade' | 'slide' | 'zoom';
+  push_notification_icon_url: string | null;
+  push_notification_large_image_url: string | null;
+  push_notification_badge_url: string | null;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  is_active: boolean;
+  photo_url: string | null;
+  media_url: string | null;
+  cta_text: string | null;
+  cta_url: string | null;
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PushSubscriptionData {
+  id?: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  created_at?: string;
 }
 
 export interface BackgroundImage {
@@ -187,6 +214,11 @@ const DEFAULT_SETTINGS: SiteSettings = {
   allow_mobile_access: true,
   mobile_bg_slideshow_interval: 5,
   desktop_bg_slideshow_interval: 5,
+  mobile_bg_transition: 'fade',
+  desktop_bg_transition: 'fade',
+  push_notification_icon_url: null,
+  push_notification_large_image_url: null,
+  push_notification_badge_url: null,
 };
 
 const DEFAULT_BUTTONS: SocialButton[] = [
@@ -509,6 +541,22 @@ export const addBackgroundImage = async (data: Omit<BackgroundImage, 'id'>): Pro
   throw new Error('Supabase tidak dikonfigurasi untuk background images.');
 };
 
+export const updateBackgroundImage = async (id: string, data: Partial<BackgroundImage>): Promise<BackgroundImage> => {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: updated, error } = await supabase
+      .from('background_images')
+      .update({ ...data })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return updated as BackgroundImage;
+  }
+  throw new Error('Supabase tidak dikonfigurasi.');
+};
+
 export const deleteBackgroundImage = async (id: string): Promise<boolean> => {
   if (isSupabaseConfigured()) {
     const supabase = getSupabaseAdmin();
@@ -593,6 +641,109 @@ export const deleteMusicTrack = async (id: string): Promise<boolean> => {
     return true;
   }
   return false;
+};
+
+// --- ANNOUNCEMENTS ACTIONS ---
+
+export const getAnnouncements = async (): Promise<Announcement[]> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabasePublic();
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.warn('Supabase get announcements error:', error.message);
+        return [];
+      }
+      return (data as Announcement[]) || [];
+    } catch (err: any) {
+      console.error('Supabase error on get announcements:', err?.message);
+      return [];
+    }
+  }
+  return [];
+};
+
+export const addAnnouncement = async (data: Omit<Announcement, 'id'>): Promise<Announcement> => {
+  const newId = crypto.randomUUID();
+  const newItem = { ...data, id: newId };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: inserted, error } = await supabase
+      .from('announcements')
+      .insert([newItem])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return inserted as Announcement;
+  }
+  throw new Error('Supabase tidak dikonfigurasi.');
+};
+
+export const updateAnnouncement = async (id: string, data: Partial<Announcement>): Promise<Announcement> => {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: updated, error } = await supabase
+      .from('announcements')
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return updated as Announcement;
+  }
+  throw new Error('Supabase tidak dikonfigurasi.');
+};
+
+export const deleteAnnouncement = async (id: string): Promise<boolean> => {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('announcements')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    return true;
+  }
+  return false;
+};
+
+// --- PUSH SUBSCRIPTIONS ACTIONS ---
+
+export const savePushSubscription = async (data: PushSubscriptionData): Promise<PushSubscriptionData> => {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabasePublic();
+    const { data: inserted, error } = await supabase
+      .from('push_subscriptions')
+      .upsert([data], { onConflict: 'endpoint' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return inserted as PushSubscriptionData;
+  }
+  throw new Error('Supabase tidak dikonfigurasi.');
+};
+
+export const getAllPushSubscriptions = async (): Promise<PushSubscriptionData[]> => {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('push_subscriptions')
+      .select('*');
+
+    if (error) throw error;
+    return data as PushSubscriptionData[];
+  }
+  return [];
 };
 
 // --- LOGIKA STORAGE (UNGGAH & HAPUS FILE) ---
@@ -710,6 +861,16 @@ export const uploadFileToStorage = async (
   } else if (bucketName === 'logo-medsos') {
     const id = customId || crypto.randomUUID();
     fileName = `logo-medsos-${id}${ext}`;
+  } else if (bucketName === 'pengumuman-foto') {
+    fileName = `admin-photo-${Date.now()}${ext}`;
+  } else if (bucketName === 'pengumuman-media') {
+    fileName = `media-${Date.now()}${ext}`;
+  } else if (bucketName === 'push-icon') {
+    fileName = `push-icon${ext}`;
+  } else if (bucketName === 'push-large-image') {
+    fileName = `push-large-image${ext}`;
+  } else if (bucketName === 'push-badge') {
+    fileName = `push-badge${ext}`;
   } else {
     fileName = `${bucketName}-${Date.now()}${ext}`;
   }
@@ -734,8 +895,8 @@ export const uploadFileToStorage = async (
   }
 
   // Hapus file lama di bucket ini jika ada, agar tidak menumpuk
-  // KHUSUS untuk file yang bersifat TUNGGAL (foto profil, favicon, og-image, logo navbar)
-  const singleFileBuckets = ['foto-profil', 'favicon', 'og-image', 'logo-navbar-settings'];
+  // KHUSUS untuk file yang bersifat TUNGGAL
+  const singleFileBuckets = ['foto-profil', 'favicon', 'og-image', 'logo-navbar-settings', 'push-icon', 'push-large-image', 'push-badge'];
   
   try {
     const { data: list } = await supabase.storage.from(bucketName).list();

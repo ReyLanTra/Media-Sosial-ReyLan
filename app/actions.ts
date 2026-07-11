@@ -17,10 +17,19 @@ import {
   addMusicTrack,
   updateMusicTrack,
   deleteMusicTrack,
+  getAnnouncements,
+  addAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement,
+  savePushSubscription,
+  getAllPushSubscriptions,
+  updateBackgroundImage,
   SiteSettings,
   SocialButton,
   BackgroundImage,
   MusicTrack,
+  Announcement,
+  PushSubscriptionData,
   getStatusConfig,
 } from '@/lib/db';
 import { loginAdmin, logoutAdmin, isAuthenticated } from '@/lib/auth';
@@ -183,6 +192,24 @@ export async function deleteBgImage(id: string, urlToDelete: string, deviceType:
   return success;
 }
 
+export async function updateBgImage(id: string, data: Partial<BackgroundImage>) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  const item = await updateBackgroundImage(id, data);
+  revalidatePath('/');
+  return item;
+}
+
+export async function reorderBgImages(images: { id: string; display_order: number }[]) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  for (const item of images) {
+    await updateBackgroundImage(item.id, { display_order: item.display_order });
+  }
+  revalidatePath('/');
+  return true;
+}
+
 // --- MUSIC PLAYLIST ---
 
 export async function getTracks() {
@@ -205,6 +232,10 @@ export async function updateTrack(id: string, data: Partial<MusicTrack>) {
   return item;
 }
 
+export async function updateMusicTrackAction(id: string, data: Partial<MusicTrack>) {
+  return await updateTrack(id, data);
+}
+
 export async function deleteTrack(id: string, urlToDelete: string) {
   const authed = await isAuthenticated();
   if (!authed) throw new Error('Akses ditolak.');
@@ -222,4 +253,66 @@ export async function reorderTracks(tracks: { id: string; display_order: number 
   }
   revalidatePath('/');
   return true;
+}
+
+// --- ANNOUNCEMENTS ---
+
+export async function fetchAnnouncements() {
+  return await getAnnouncements();
+}
+
+export async function createAnnouncement(data: Omit<Announcement, 'id'>) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  const item = await addAnnouncement(data);
+  revalidatePath('/');
+  return item;
+}
+
+export async function updateAnnouncementAction(id: string, data: Partial<Announcement>) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  const item = await updateAnnouncement(id, data);
+  revalidatePath('/');
+  return item;
+}
+
+export async function removeAnnouncement(id: string, photoUrl?: string, mediaUrl?: string) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  
+  if (photoUrl) await deleteFileFromStorage('pengumuman-foto', photoUrl);
+  if (mediaUrl) await deleteFileFromStorage('pengumuman-media', mediaUrl);
+  
+  const success = await deleteAnnouncement(id);
+  revalidatePath('/');
+  return success;
+}
+
+// --- PUSH NOTIFICATIONS ---
+
+export async function saveSubscription(data: PushSubscriptionData) {
+  return await savePushSubscription(data);
+}
+
+export async function getSubscriptionsCount() {
+  const subs = await getAllPushSubscriptions();
+  return subs.length;
+}
+
+export async function sendPushNotification(payload: { title: string; message: string; icon?: string; image?: string; badge?: string }) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+
+  const subs = await getAllPushSubscriptions();
+  if (subs.length === 0) return { success: false, message: 'Tidak ada pengunjung yang terdaftar.' };
+
+  // Kirim notifikasi menggunakan API route server-side untuk memproses library web-push
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/push/send`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payload, subscriptions: subs }),
+  });
+
+  return await res.json();
 }

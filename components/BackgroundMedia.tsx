@@ -14,6 +14,8 @@ interface BackgroundMediaProps {
   desktopImages: BackgroundImage[];
   mobileInterval: number;
   desktopInterval: number;
+  mobileTransition: 'fade' | 'slide' | 'zoom';
+  desktopTransition: 'fade' | 'slide' | 'zoom';
   isMobile: boolean;
 }
 
@@ -26,6 +28,8 @@ export default function BackgroundMedia({
   desktopImages, 
   mobileInterval, 
   desktopInterval,
+  mobileTransition,
+  desktopTransition,
   isMobile 
 }: BackgroundMediaProps) {
   const [currentIdx, setCurrentIdx] = React.useState(0);
@@ -34,22 +38,21 @@ export default function BackgroundMedia({
   const activeInterval = isMobile ? mobileInterval : desktopInterval;
   const activeType = isMobile ? type : desktopType;
   const activeUrl = isMobile ? url : desktopUrl;
+  const activeTransition = isMobile ? (mobileTransition || 'fade') : (desktopTransition || 'fade');
 
   // Slideshow logic
   React.useEffect(() => {
-    if (activeImages.length <= 1 || activeType !== 'image') return;
+    if (activeImages.length <= 1 || activeType !== 'image') {
+      return;
+    }
     
+    // Reset timer setiap kali interval atau daftar gambar berubah
     const timer = setInterval(() => {
       setCurrentIdx((prev) => (prev + 1) % activeImages.length);
     }, activeInterval * 1000);
 
     return () => clearInterval(timer);
   }, [activeImages.length, activeInterval, activeType]);
-
-  // Reset index when switching between mobile/desktop or when images change
-  React.useEffect(() => {
-    setCurrentIdx(0);
-  }, [isMobile, activeImages.length]);
 
   // Fallback to default if no media available
   if ((!activeUrl && activeImages.length === 0)) {
@@ -59,6 +62,32 @@ export default function BackgroundMedia({
       </div>
     );
   }
+
+  const getVariants = () => {
+    switch (activeTransition) {
+      case 'slide':
+        return {
+          initial: { opacity: 0, x: 100 },
+          animate: { opacity: 1, x: 0 },
+          exit: { opacity: 0, x: -100 }
+        };
+      case 'zoom':
+        return {
+          initial: { opacity: 0, scale: 1.2 },
+          animate: { opacity: 1, scale: 1.05 },
+          exit: { opacity: 0, scale: 0.9 }
+        };
+      case 'fade':
+      default:
+        return {
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
+          exit: { opacity: 0 }
+        };
+    }
+  };
+
+  const variants = getVariants();
 
   const renderContent = () => {
     if (activeType === 'video') {
@@ -89,14 +118,17 @@ export default function BackgroundMedia({
 
     // Default to Slideshow for type 'image'
     return (
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="popLayout">
         <motion.img
           key={activeImages[currentIdx]?.id || 'static'}
           src={activeImages.length > 0 ? activeImages[currentIdx].image_url : (activeUrl || '')}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 1.5, ease: 'easeInOut' }}
+          initial={variants.initial}
+          animate={variants.animate}
+          exit={variants.exit}
+          transition={{ 
+            duration: activeTransition === 'fade' ? 1.5 : 0.8, 
+            ease: 'easeInOut' 
+          }}
           className="absolute inset-0 w-full h-full object-cover scale-105"
           referrerPolicy="no-referrer"
         />
@@ -105,7 +137,7 @@ export default function BackgroundMedia({
   };
 
   return (
-    <div className="absolute inset-0 -z-50 overflow-hidden w-full h-full select-none pointer-events-none">
+    <div key={isMobile ? 'mobile' : 'desktop'} className="absolute inset-0 -z-50 overflow-hidden w-full h-full select-none pointer-events-none">
       {/* Gelap overlay untuk kenyamanan membaca teks */}
       <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] z-10" />
 

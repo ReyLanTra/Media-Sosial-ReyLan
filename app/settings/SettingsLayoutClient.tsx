@@ -16,7 +16,9 @@ import {
   AlertCircle, 
   Menu, 
   X, 
-  Paintbrush 
+  Paintbrush,
+  Megaphone,
+  Bell
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { login, logout } from '@/app/actions';
@@ -135,6 +137,8 @@ export default function SettingsLayoutClient({
     { name: 'Profil & Konten', icon: User, path: '/settings/profil-konten' },
     { name: 'Tombol Medsos', icon: LinkIcon, path: '/settings/tombol-medsos' },
     { name: 'Latar & Musik', icon: Sliders, path: '/settings/latar-musik' },
+    { name: 'Pengumuman', icon: Megaphone, path: '/settings/pengumuman' },
+    { name: 'Push Notifikasi', icon: Bell, path: '/settings/notifikasi' },
     { name: 'Optimasi SEO (OG)', icon: Share2, path: '/settings/optimasi-seo' },
     { name: 'Keamanan', icon: Shield, path: '/settings/keamanan' },
     { name: 'Tampilan Settings', icon: Paintbrush, path: '/settings/tampilan' },

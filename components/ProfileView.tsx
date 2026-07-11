@@ -4,12 +4,14 @@ import * as React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Sparkles, ChevronRight } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { SiteSettings, SocialButton, BackgroundImage, MusicTrack } from '@/lib/db';
+import { SiteSettings, SocialButton, BackgroundImage, MusicTrack, Announcement } from '@/lib/db';
 import BackgroundMedia from './BackgroundMedia';
 import AudioPlayer from './AudioPlayer';
 import VerificationBadge from './VerificationBadge';
 import ShareButton from './ShareButton';
 import AccessDenied from './AccessDenied';
+import AnnouncementCard from './AnnouncementCard';
+import { usePushNotifications } from '@/hooks/use-push-notifications';
 
 interface ProfileViewProps {
   settings: SiteSettings;
@@ -17,6 +19,7 @@ interface ProfileViewProps {
   mobileBgImages: BackgroundImage[];
   desktopBgImages: BackgroundImage[];
   tracks: MusicTrack[];
+  announcements: Announcement[];
 }
 
 export default function ProfileView({ 
@@ -24,13 +27,23 @@ export default function ProfileView({
   buttons = [], 
   mobileBgImages = [], 
   desktopBgImages = [], 
-  tracks = [] 
+  tracks = [],
+  announcements = []
 }: ProfileViewProps) {
   const isMobile = useIsMobile();
+  const { permission, isSubscribed, subscribe } = usePushNotifications();
   const [hasEntered, setHasEntered] = React.useState(false);
 
   const handleEnter = () => {
     setHasEntered(true);
+    
+    // Otomatis tawarkan berlangganan notifikasi jika belum
+    if (permission === 'default') {
+      setTimeout(() => {
+        subscribe();
+      }, 2000);
+    }
+
     // Kirim event kustom untuk memutar backsound
     const event = new CustomEvent('play-backsound');
     window.dispatchEvent(event);
@@ -305,6 +318,8 @@ export default function ProfileView({
         desktopImages={desktopBgImages}
         mobileInterval={settings.mobile_bg_slideshow_interval || 5}
         desktopInterval={settings.desktop_bg_slideshow_interval || 5}
+        mobileTransition={settings.mobile_bg_transition || 'fade'}
+        desktopTransition={settings.desktop_bg_transition || 'fade'}
         isMobile={isMobile}
       />
 
@@ -316,6 +331,8 @@ export default function ProfileView({
         tracks={tracks}
         volume={settings.backsound_volume}
         enabled={settings.backsound_enabled}
+        accountName={settings.account_name}
+        profilePhotoUrl={settings.profile_photo_url || undefined}
       />
 
       {/* Kontainer Profil */}
@@ -368,6 +385,9 @@ export default function ProfileView({
             </motion.div>
           )}
         </div>
+
+        {/* Papan Pengumuman */}
+        <AnnouncementCard announcements={announcements} />
 
         {activeButtons.length > 0 ? (
           <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-3.5 w-full">

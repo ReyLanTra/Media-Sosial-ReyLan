@@ -2,16 +2,18 @@
 
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { Play, Pause, Music, SkipForward } from 'lucide-react';
+import { Play, Pause, Music, SkipForward, SkipBack } from 'lucide-react';
 import { MusicTrack } from '@/lib/db';
 
 interface AudioPlayerProps {
   tracks: MusicTrack[];
   volume: number; // 0 s.d 100
   enabled: boolean;
+  accountName?: string;
+  profilePhotoUrl?: string;
 }
 
-export default function AudioPlayer({ tracks, volume, enabled }: AudioPlayerProps) {
+export default function AudioPlayer({ tracks, volume, enabled, accountName, profilePhotoUrl }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [currentTrackIdx, setCurrentTrackIdx] = React.useState(0);
   const [showTooltip, setShowTooltip] = React.useState(true);
@@ -32,6 +34,43 @@ export default function AudioPlayer({ tracks, volume, enabled }: AudioPlayerProp
 
   const currentTrack = tracks[currentTrackIdx];
 
+  const playNext = React.useCallback(() => {
+    setCurrentTrackIdx((prev) => (prev + 1) % tracks.length);
+  }, [tracks.length]);
+
+  const playPrevious = React.useCallback(() => {
+    setCurrentTrackIdx((prev) => (prev - 1 + tracks.length) % tracks.length);
+  }, [tracks.length]);
+
+  // Media Session API Setup
+  React.useEffect(() => {
+    if (!('mediaSession' in navigator) || !currentTrack) return;
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: currentTrack.title || 'Musik ReyLan',
+      artist: accountName || 'ReyLan Official',
+      album: 'ReyLan Link-in-Bio',
+      artwork: profilePhotoUrl ? [{ src: profilePhotoUrl, sizes: '512x512', type: 'image/png' }] : [],
+    });
+
+    navigator.mediaSession.setActionHandler('play', () => {
+      audioRef.current?.play().then(() => setIsPlaying(true));
+    });
+    navigator.mediaSession.setActionHandler('pause', () => {
+      audioRef.current?.pause();
+      setIsPlaying(false);
+    });
+    navigator.mediaSession.setActionHandler('previoustrack', playPrevious);
+    navigator.mediaSession.setActionHandler('nexttrack', playNext);
+
+    return () => {
+      navigator.mediaSession.setActionHandler('play', null);
+      navigator.mediaSession.setActionHandler('pause', null);
+      navigator.mediaSession.setActionHandler('previoustrack', null);
+      navigator.mediaSession.setActionHandler('nexttrack', null);
+    };
+  }, [currentTrack, accountName, profilePhotoUrl, playNext, playPrevious]);
+
   // Initialize and handle playlist auto-next
   React.useEffect(() => {
     if (!currentTrack || !enabled) {
@@ -46,10 +85,7 @@ export default function AudioPlayer({ tracks, volume, enabled }: AudioPlayerProp
     audio.volume = volume / 100;
     audioRef.current = audio;
 
-    audio.onended = () => {
-      // Auto next
-      setCurrentTrackIdx((prev) => (prev + 1) % tracks.length);
-    };
+    audio.onended = playNext;
 
     if (isPlaying) {
       audio.play().catch(console.error);
@@ -61,7 +97,7 @@ export default function AudioPlayer({ tracks, volume, enabled }: AudioPlayerProp
         audioRef.current = null;
       }
     };
-  }, [currentTrackIdx, tracks.length, enabled, currentTrack, isPlaying, volume]);
+  }, [currentTrackIdx, tracks.length, enabled, currentTrack, isPlaying, volume, playNext]);
 
   // Handle isPlaying synchronization when disabled
   React.useEffect(() => {
@@ -161,12 +197,20 @@ export default function AudioPlayer({ tracks, volume, enabled }: AudioPlayerProp
       </button>
 
       {isPlaying && tracks.length > 1 && (
-        <button 
-          onClick={() => setCurrentTrackIdx((prev) => (prev + 1) % tracks.length)}
-          className="w-8 h-8 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all"
-        >
-          <SkipForward className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button 
+            onClick={playPrevious}
+            className="w-8 h-8 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all"
+          >
+            <SkipBack className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={playNext}
+            className="w-8 h-8 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all"
+          >
+            <SkipForward className="w-4 h-4" />
+          </button>
+        </div>
       )}
     </motion.div>
   );

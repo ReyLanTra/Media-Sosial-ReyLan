@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { Metadata } from 'next';
-import { getSiteSettings, getSocialButtons, getBackgroundImages, getMusicTracks } from '@/lib/db';
+import { getSiteSettings, getSocialButtons, getBackgroundImages, getMusicTracks, getAnnouncements } from '@/lib/db';
 import ProfileView from '@/components/ProfileView';
 
 // Menghasilkan meta-data Open Graph dan Favicon dinamis secara real-time dari database
@@ -39,6 +39,7 @@ export default async function HomePage() {
   const mobileBgImages = await getBackgroundImages('mobile');
   const desktopBgImages = await getBackgroundImages('desktop');
   const tracks = await getMusicTracks();
+  const announcements = await getAnnouncements();
 
   return (
     <ProfileView 
@@ -47,6 +48,7 @@ export default async function HomePage() {
       mobileBgImages={mobileBgImages}
       desktopBgImages={desktopBgImages}
       tracks={tracks}
+      announcements={announcements}
     />
   );
 }
