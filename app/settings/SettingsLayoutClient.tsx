@@ -140,10 +140,219 @@ export default function SettingsLayoutClient({
     { name: 'Tampilan Settings', icon: Paintbrush, path: '/settings/tampilan' },
   ];
 
+  // Mematikan fungsionalitas interaksi secara dinamis dan independen berdasarkan opsi admin
+  const settings = React.useMemo(() => {
+    return {
+      disable_zoom: initialSettings?.disable_zoom ?? false,
+      disable_scroll: initialSettings?.disable_scroll ?? false,
+      disable_image_save: initialSettings?.disable_image_save ?? false,
+      disable_text_select: initialSettings?.disable_text_select ?? false,
+      disable_pull_refresh: initialSettings?.disable_pull_refresh ?? false,
+      disable_link_preview: initialSettings?.disable_link_preview ?? false,
+    };
+  }, [initialSettings]);
+
+  const dynamicStyles = React.useMemo(() => {
+    return `
+      ${settings.disable_text_select ? `
+        body, html, .scrollable-content, .scrollable-content * {
+          -webkit-user-select: none !important;
+          user-select: none !important;
+        }
+        input, textarea, select, option, button {
+          -webkit-user-select: text !important;
+          user-select: text !important;
+        }
+      ` : `
+        body, html, .scrollable-content, .scrollable-content * {
+          -webkit-user-select: text !important;
+          user-select: text !important;
+        }
+      `}
+      ${settings.disable_image_save ? `
+        img {
+          pointer-events: none !important;
+          -webkit-touch-callout: none !important;
+          -webkit-user-drag: none !important;
+        }
+      ` : `
+        img {
+          pointer-events: auto !important;
+          -webkit-touch-callout: default !important;
+          -webkit-user-drag: auto !important;
+        }
+      `}
+      ${settings.disable_link_preview ? `
+        a, button, [role="button"] {
+          -webkit-touch-callout: none !important;
+        }
+      ` : `
+        a, button, [role="button"] {
+          -webkit-touch-callout: default !important;
+        }
+      `}
+      ${settings.disable_pull_refresh ? `
+        body, html {
+          overscroll-behavior-y: none !important;
+          overscroll-behavior: none !important;
+        }
+      ` : `
+        body, html {
+          overscroll-behavior-y: auto !important;
+          overscroll-behavior: auto !important;
+        }
+      `}
+    `;
+  }, [settings]);
+
+  React.useEffect(() => {
+    // 1. Zoom lock (disable_zoom)
+    const handleTouchStart = (e: TouchEvent) => {
+      if (settings.disable_zoom && e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+
+    let lastTouchEnd = 0;
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (settings.disable_zoom) {
+        const now = Date.now();
+        if (now - lastTouchEnd <= 300) {
+          e.preventDefault();
+        }
+        lastTouchEnd = now;
+      }
+    };
+
+    const handleGestureStart = (e: Event) => {
+      if (settings.disable_zoom) {
+        e.preventDefault();
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (settings.disable_zoom && e.ctrlKey) {
+        e.preventDefault();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (settings.disable_zoom && e.ctrlKey && (
+        e.key === '=' || e.key === '-' || e.key === '0' || e.key === '+' ||
+        e.code === 'Equal' || e.code === 'Minus' || e.code === 'Digit0'
+      )) {
+        e.preventDefault();
+      }
+    };
+
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (settings.disable_zoom) {
+      if (meta) {
+        meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
+      }
+    } else {
+      if (meta) {
+        meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes');
+      }
+    }
+
+    // 2. Scroll lock & Zoom lock combined touchmove handler
+    const preventTouchMove = (e: TouchEvent) => {
+      if (settings.disable_zoom && e.touches.length > 1) {
+        e.preventDefault();
+        return;
+      }
+      if (settings.disable_scroll) {
+        const target = e.target as HTMLElement;
+        if (target.closest('.scrollable-content')) {
+          return; // Izinkan scroll dalam area bento jika diizinkan
+        }
+        e.preventDefault();
+      }
+    };
+
+    if (settings.disable_scroll) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
+      document.documentElement.style.overflow = 'hidden';
+      document.documentElement.style.overscrollBehavior = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.overscrollBehavior = '';
+    }
+
+    // 3. Klik kanan / long-press pada gambar (disable_image_save) & long-press preview link (disable_link_preview)
+    const handleGlobalContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (settings.disable_image_save && target.closest('img')) {
+        e.preventDefault();
+      }
+      if (settings.disable_link_preview && target.closest('a')) {
+        e.preventDefault();
+      }
+    };
+
+    // 4. Copy / Text select (disable_text_select)
+    const handleSelectStart = (e: Event) => {
+      if (settings.disable_text_select) {
+        e.preventDefault();
+      }
+    };
+
+    // 5. Drag start (untuk gambar atau text)
+    const handleDragStart = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (settings.disable_image_save && target.closest('img')) {
+        e.preventDefault();
+      }
+    };
+
+    // 6. Pull to refresh (disable_pull_refresh)
+    if (settings.disable_pull_refresh) {
+      document.documentElement.style.overscrollBehaviorY = 'none';
+      document.body.style.overscrollBehaviorY = 'none';
+    } else {
+      document.documentElement.style.overscrollBehaviorY = '';
+      document.body.style.overscrollBehaviorY = '';
+    }
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', preventTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd, { passive: false });
+    document.addEventListener('gesturestart', handleGestureStart, { passive: false });
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('keydown', handleKeyDown, { passive: false });
+    document.addEventListener('contextmenu', handleGlobalContextMenu);
+    document.addEventListener('selectstart', handleSelectStart);
+    document.addEventListener('dragstart', handleDragStart);
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', preventTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+      document.removeEventListener('gesturestart', handleGestureStart);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('contextmenu', handleGlobalContextMenu);
+      document.removeEventListener('selectstart', handleSelectStart);
+      document.removeEventListener('dragstart', handleDragStart);
+      
+      document.body.style.overflow = '';
+      document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.overscrollBehavior = '';
+      document.documentElement.style.overscrollBehaviorY = '';
+      document.body.style.overscrollBehaviorY = '';
+    };
+  }, [settings]);
+
   // RENDER LOGIN SCREEN IF NOT AUTHENTICATED
   if (!authed) {
     return (
       <div className="fixed inset-0 flex items-center justify-center p-4 bg-slate-950 overflow-y-auto">
+        <style dangerouslySetInnerHTML={{ __html: dynamicStyles }} />
         <div className="absolute top-1/4 right-1/4 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse"></div>
         <div className="absolute bottom-1/4 left-1/4 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse delay-700"></div>
 
@@ -207,7 +416,7 @@ export default function SettingsLayoutClient({
   // RENDER SETTINGS MAIN DASHBOARD LAYOUT WITH SIDEBAR & ACCENT COLOR
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans flex flex-col md:flex-row">
-      {/* Dynamic Accent Color Style Override */}
+      {/* Dynamic Accent Color Style Override & Security Restrictions */}
       <style>{`
         :root {
           --settings-accent: ${accentColor};
@@ -227,6 +436,7 @@ export default function SettingsLayoutClient({
         .ring-settings-accent:focus {
           --tw-ring-color: ${accentColor} !important;
         }
+        ${dynamicStyles}
       `}</style>
 
       {/* MOBILE HEADER NAVBAR */}
@@ -259,7 +469,7 @@ export default function SettingsLayoutClient({
 
       {/* SIDEBAR NAVIGATION (DESKTOP & MOBILE TRANSITION) */}
       <aside className={`
-        fixed inset-y-0 left-0 w-72 border-r border-white/10 bg-slate-900/95 backdrop-blur-md flex flex-col justify-between shrink-0 z-50 transform md:transform-none transition-transform duration-300 ease-in-out md:sticky md:h-screen md:top-0
+        fixed inset-y-0 left-0 w-72 border-r border-white/10 bg-slate-900/95 backdrop-blur-md flex flex-col justify-between shrink-0 z-50 transform md:transform-none transition-transform duration-300 ease-in-out md:sticky md:h-screen md:top-0 scrollable-content
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         <div className="p-6">
@@ -365,7 +575,7 @@ export default function SettingsLayoutClient({
       )}
 
       {/* MAIN CONTENT AREA */}
-      <main className="flex-1 p-6 md:p-10 max-w-4xl overflow-y-auto">
+      <main className="flex-1 p-6 md:p-10 max-w-4xl overflow-y-auto scrollable-content">
         <div className="space-y-8">
           {/* NOTIFICATION TOAST */}
           <AnimatePresence>
