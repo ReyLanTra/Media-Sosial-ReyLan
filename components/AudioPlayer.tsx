@@ -15,23 +15,20 @@ export default function AudioPlayer({ tracks, volume, enabled }: AudioPlayerProp
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [currentTrackIdx, setCurrentTrackIdx] = React.useState(0);
   const [showTooltip, setShowTooltip] = React.useState(true);
-  const [position, setPosition] = React.useState({ x: 0, y: 0 });
-  const audioRef = React.useRef<HTMLAudioElement | null>(null);
-
-  // Load position from localStorage
-  React.useEffect(() => {
+  const [position, setPosition] = React.useState<{ x: number, y: number }>(() => {
+    if (typeof window === 'undefined') return { x: 0, y: 0 };
     const savedPos = localStorage.getItem('audio_button_pos');
     if (savedPos) {
       try {
-        setPosition(JSON.parse(savedPos));
+        return JSON.parse(savedPos);
       } catch (e) {
         console.error('Error parsing saved position');
       }
-    } else {
-      // Default position: bottom right
-      setPosition({ x: window.innerWidth - 80, y: window.innerHeight - 80 });
     }
-  }, []);
+    // Default position: bottom right
+    return { x: window.innerWidth - 80, y: window.innerHeight - 80 };
+  });
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const currentTrack = tracks[currentTrackIdx];
 
@@ -42,7 +39,6 @@ export default function AudioPlayer({ tracks, volume, enabled }: AudioPlayerProp
         audioRef.current.pause();
         audioRef.current = null;
       }
-      setIsPlaying(false);
       return;
     }
 
@@ -66,6 +62,14 @@ export default function AudioPlayer({ tracks, volume, enabled }: AudioPlayerProp
       }
     };
   }, [currentTrackIdx, tracks.length, enabled, currentTrack, isPlaying, volume]);
+
+  // Handle isPlaying synchronization when disabled
+  React.useEffect(() => {
+    if ((!currentTrack || !enabled) && isPlaying) {
+      const timer = setTimeout(() => setIsPlaying(false), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [currentTrack, enabled, isPlaying]);
 
   // Volume control
   React.useEffect(() => {

@@ -163,6 +163,7 @@ export default function LatarMusikClient({
       const formData = new FormData();
       formData.append('file', file);
       formData.append('bucket', 'background');
+      formData.append('customId', (mobileBgImages.length + 1).toString());
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const resData = await res.json();
       if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah gambar.');
@@ -208,6 +209,7 @@ export default function LatarMusikClient({
         const formData = new FormData();
         formData.append('file', file);
         formData.append('bucket', 'background-desktop');
+        formData.append('customId', (desktopBgImages.length + 1).toString());
         const res = await fetch('/api/upload', { method: 'POST', body: formData });
         const resData = await res.json();
         if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah gambar.');
@@ -235,6 +237,7 @@ export default function LatarMusikClient({
       const formData = new FormData();
       formData.append('file', file);
       formData.append('bucket', 'backsound');
+      formData.append('customId', (tracks.length + 1).toString());
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const resData = await res.json();
       if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah musik.');

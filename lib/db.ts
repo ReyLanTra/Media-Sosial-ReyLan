@@ -687,10 +687,14 @@ export const uploadFileToStorage = async (
     fileName = `foto-profil${ext}`;
   } else if (bucketName === 'favicon') {
     fileName = `favicon${ext}`;
-  } else if (bucketName === 'background') {
-    fileName = `background${ext}`;
+  } else if (bucketName === 'background' || bucketName === 'background-desktop') {
+    // Jika ada customId (misal urutan atau ID), gunakan itu agar tidak menimpa
+    const id = customId || Date.now();
+    fileName = `background${id}${ext}`;
   } else if (bucketName === 'backsound') {
-    fileName = `backsound${ext}`;
+    // Jika ada customId (misal urutan atau ID), gunakan itu agar tidak menimpa
+    const id = customId || Date.now();
+    fileName = `backsound${id}${ext}`;
   } else if (bucketName === 'og-image') {
     fileName = `og-image${ext}`;
   } else if (bucketName === 'logo-navbar-settings') {
@@ -722,14 +726,19 @@ export const uploadFileToStorage = async (
   }
 
   // Hapus file lama di bucket ini jika ada, agar tidak menumpuk
+  // KHUSUS untuk file yang bersifat TUNGGAL (foto profil, favicon, og-image, logo navbar)
+  const singleFileBuckets = ['foto-profil', 'favicon', 'og-image', 'logo-navbar-settings'];
+  
   try {
     const { data: list } = await supabase.storage.from(bucketName).list();
     if (list && list.length > 0) {
-      if (bucketName !== 'logo-medsos') {
+      if (singleFileBuckets.includes(bucketName)) {
         const filesToRemove = list.map(f => f.name);
         await supabase.storage.from(bucketName).remove(filesToRemove);
-      } else if (customId) {
-        const targetPrefix = `logo-medsos-${customId}`;
+      } else if (customId && (bucketName === 'logo-medsos' || bucketName === 'backsound' || bucketName === 'background' || bucketName === 'background-desktop')) {
+        // Hanya hapus jika ada file dengan ID yang persis sama (untuk upsert yang bersih)
+        // Namun karena kita ingin "banyak file", kita biarkan saja kecuali sengaja menimpa ID yang sama
+        const targetPrefix = bucketName === 'logo-medsos' ? `logo-medsos-${customId}` : `${bucketName}${customId}`;
         const filesToRemove = list.filter(f => f.name.startsWith(targetPrefix)).map(f => f.name);
         if (filesToRemove.length > 0) {
           await supabase.storage.from(bucketName).remove(filesToRemove);
