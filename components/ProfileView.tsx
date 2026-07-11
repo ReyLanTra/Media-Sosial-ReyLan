@@ -30,49 +30,100 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
     backsound_volume: 50,
     backsound_enabled: true,
     footer_text: '© 2026 ReyLan. All rights reserved.',
+    tagline_text: 'OFFICIAL LINK-IN-BIO',
+    profile_glow_mode: 'solid',
+    profile_glow_color_start: '#8083ff',
+    profile_glow_color_end: '#ffb0cd',
+    profile_glow_direction: 'radial',
+    disable_zoom: false,
+    disable_scroll: false,
+    disable_image_save: false,
+    disable_text_select: false,
+    disable_pull_refresh: false,
+    disable_link_preview: false,
   };
 
-  // Mematikan scroll, drag to refresh, klik kanan, copy teks, dan long press preview di halaman utama
+  // Mematikan fungsionalitas interaksi secara dinamis dan independen berdasarkan opsi admin
   React.useEffect(() => {
-    if (isMobile === false) return;
-
-    const preventDefault = (e: Event) => {
-      e.preventDefault();
-    };
-
-    const preventSelection = (e: Event) => {
-      e.preventDefault();
-    };
-
-    // Deteksi touchmove untuk membatasi scroll luar halaman
-    const preventTouchMove = (e: TouchEvent) => {
-      // Izinkan scroll hanya jika berada di dalam area scrollable-content, selebihnya di-block
-      const target = e.target as HTMLElement;
-      if (target.closest('.scrollable-content')) {
-        return;
+    // 1. Zoom lock (disable_zoom)
+    if (settings.disable_zoom) {
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (meta) {
+        meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');
       }
-      e.preventDefault();
+    }
+
+    // 2. Scroll lock (disable_scroll)
+    if (settings.disable_scroll) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.overscrollBehavior = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.overscrollBehavior = '';
+    }
+
+    // 3. Klik kanan / long-press pada gambar (disable_image_save) & long-press preview link (disable_link_preview)
+    const handleGlobalContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (settings.disable_image_save && target.closest('img')) {
+        e.preventDefault();
+      }
+      if (settings.disable_link_preview && target.closest('a')) {
+        e.preventDefault();
+      }
     };
 
-    // Tambahkan event listeners
-    document.addEventListener('contextmenu', preventDefault);
-    document.addEventListener('selectstart', preventSelection);
-    document.addEventListener('dragstart', preventDefault);
+    // 4. Copy / Text select (disable_text_select)
+    const handleSelectStart = (e: Event) => {
+      if (settings.disable_text_select) {
+        e.preventDefault();
+      }
+    };
+
+    // 5. Drag start (untuk gambar atau text)
+    const handleDragStart = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (settings.disable_image_save && target.closest('img')) {
+        e.preventDefault();
+      }
+    };
+
+    // 6. Pull to refresh (disable_pull_refresh)
+    if (settings.disable_pull_refresh) {
+      document.documentElement.style.overscrollBehaviorY = 'none';
+      document.body.style.overscrollBehaviorY = 'none';
+    } else {
+      document.documentElement.style.overscrollBehaviorY = '';
+      document.body.style.overscrollBehaviorY = '';
+    }
+
+    // Touchmove prevent jika scroll dikunci secara global
+    const preventTouchMove = (e: TouchEvent) => {
+      if (settings.disable_scroll) {
+        const target = e.target as HTMLElement;
+        if (target.closest('.scrollable-content')) {
+          return; // Izinkan scroll dalam area bento jika diizinkan
+        }
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('contextmenu', handleGlobalContextMenu);
+    document.addEventListener('selectstart', handleSelectStart);
+    document.addEventListener('dragstart', handleDragStart);
     document.addEventListener('touchmove', preventTouchMove, { passive: false });
 
-    // Tambahkan properti body
-    document.body.style.overflow = 'hidden';
-    document.body.style.overscrollBehavior = 'none';
-
     return () => {
-      document.removeEventListener('contextmenu', preventDefault);
-      document.removeEventListener('selectstart', preventSelection);
-      document.removeEventListener('dragstart', preventDefault);
+      document.removeEventListener('contextmenu', handleGlobalContextMenu);
+      document.removeEventListener('selectstart', handleSelectStart);
+      document.removeEventListener('dragstart', handleDragStart);
       document.removeEventListener('touchmove', preventTouchMove);
       document.body.style.overflow = '';
       document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overscrollBehaviorY = '';
+      document.body.style.overscrollBehaviorY = '';
     };
-  }, [isMobile]);
+  }, [settings]);
 
   // Memastikan rendering aman dari inkonsistensi hidrasi (hydration mismatch)
   if (isMobile === null) {
@@ -91,10 +142,32 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
     return <MobileWarning />;
   }
 
-  // Filter hanya tombol sosial yang aktif dan urutkan berdasarkan display_order
+  // Filter hanya tombol sosial yang aktif dan urutkan berdasarkan display_order secara aman
   const activeButtons = (buttons || [])
     .filter((btn) => btn && btn.is_active)
-    .sort((a, b) => a.display_order - b.display_order);
+    .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+
+  // Menghitung gaya dinamis untuk glow foto profil utama
+  const getGlowStyle = (): React.CSSProperties => {
+    const startColor = settings.profile_glow_color_start || '#8083ff';
+    const endColor = settings.profile_glow_color_end || '#ffb0cd';
+    
+    if (settings.profile_glow_mode === 'gradient') {
+      if (settings.profile_glow_direction === 'linear') {
+        return {
+          backgroundImage: `linear-gradient(135deg, ${startColor} 0%, ${endColor} 100%)`,
+        };
+      } else {
+        return {
+          backgroundImage: `radial-gradient(circle, ${startColor} 0%, ${endColor} 100%)`,
+        };
+      }
+    }
+    
+    return {
+      backgroundColor: startColor,
+    };
+  };
 
   // Variasi animasi untuk container bento/daftar tombol
   const containerVariants = {
@@ -146,8 +219,11 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
             className="relative group"
             onContextMenu={(e) => e.preventDefault()}
           >
-            {/* Glow Ring Effect */}
-            <div className="absolute -inset-1.5 bg-gradient-to-tr from-blue-500 to-purple-500 rounded-full blur-lg opacity-70 group-hover:opacity-100 transition-opacity duration-500 animate-pulse"></div>
+            {/* Glow Ring Effect Dinamis */}
+            <div 
+              style={getGlowStyle()}
+              className="absolute -inset-1.5 rounded-full blur-lg opacity-70 group-hover:opacity-100 transition-opacity duration-500 animate-pulse"
+            ></div>
             
             {/* Avatar Frame */}
             <div className="relative w-28 h-28 rounded-full p-1 bg-white/20 border border-white/30 backdrop-blur-md overflow-hidden">
@@ -185,15 +261,17 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
               {settings.is_verified && <VerificationBadge className="w-6 h-6" />}
             </motion.h1>
             
-            {/* Tagline / Subtitle */}
-            <motion.p 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="text-xs font-mono text-blue-300 tracking-widest uppercase font-semibold"
-            >
-              Official Link-in-Bio
-            </motion.p>
+            {/* Tagline / Subtitle Dinamis */}
+            {(settings.tagline_text || settings.tagline_text === undefined) && (
+              <motion.p 
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-xs font-mono text-blue-300 tracking-widest uppercase font-semibold"
+              >
+                {settings.tagline_text || 'OFFICIAL LINK-IN-BIO'}
+              </motion.p>
+            )}
           </div>
 
           {/* Deskripsi Bio dalam Panel Kaca Kecil */}
@@ -258,8 +336,8 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
             ))}
           </motion.div>
         ) : (
-          <div className="text-center p-6 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-sm">
-            <p className="text-sm text-slate-400">Belum ada media sosial yang terdaftar.</p>
+          <div className="text-center p-8 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] backdrop-blur-sm text-slate-500 text-xs">
+            <p>Belum ada media sosial yang aktif atau terdaftar.</p>
           </div>
         )}
 

@@ -1,0 +1,289 @@
+'use client';
+
+import * as React from 'react';
+import { useSettingsDraft } from '@/hooks/useSettingsDraft';
+import { updateSettings, uploadMedia } from '@/app/actions';
+import { SiteSettings } from '@/lib/db';
+import { 
+  Upload, 
+  RotateCcw, 
+  RotateCw, 
+  Check, 
+  X, 
+  Share2, 
+  Info,
+  CheckCircle
+} from 'lucide-react';
+
+interface OptimasiSeoClientProps {
+  initialSettings: SiteSettings;
+}
+
+export default function OptimasiSeoClient({ initialSettings }: OptimasiSeoClientProps) {
+  // Pending File Upload
+  const [ogImageFile, setOgImageFile] = React.useState<{ base64: string; name: string } | null>(null);
+  const [saveSuccess, setSaveSuccess] = React.useState(false);
+
+  const {
+    data: settings,
+    updateData,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    isDirty,
+    isSaving,
+    error,
+    reset: resetDraft,
+    save: saveDraft,
+  } = useSettingsDraft<SiteSettings>(initialSettings, async (currentData) => {
+    let finalData = { ...currentData };
+
+    // 1. Upload og-image kustom jika ada
+    if (ogImageFile) {
+      const url = await uploadMedia('og-image', ogImageFile.base64, ogImageFile.name);
+      finalData.og_image_url = url;
+    }
+
+    // 2. Simpan ke database
+    await updateSettings(finalData);
+
+    setOgImageFile(null);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  });
+
+  // Set flag kotor pada level sessionStorage
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const dirty = isDirty || !!ogImageFile;
+      if (dirty) {
+        sessionStorage.setItem('isSettingsDraftDirty', 'true');
+      } else {
+        sessionStorage.removeItem('isSettingsDraftDirty');
+      }
+    }
+  }, [isDirty, ogImageFile]);
+
+  // Batal draf
+  const handleCancelAll = () => {
+    setOgImageFile(null);
+    resetDraft();
+  };
+
+  // Convert file to base64
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setOgImageFile({
+        base64: reader.result as string,
+        name: file.name
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Helper preview
+  const getOgImagePreview = () => {
+    if (ogImageFile) return ogImageFile.base64;
+    return settings.og_image_url || '';
+  };
+
+  const hasPendingChanges = isDirty || !!ogImageFile;
+
+  return (
+    <div className="space-y-6 animate-fade-in" style={{ animationDuration: '0.3s' }}>
+      
+      {/* HEADER DENGAN STATUS DRAFT & RIWAYAT */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 border-b border-white/10">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            Optimasi SEO (OG)
+            {hasPendingChanges && (
+              <span className="text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono py-1 px-2.5 rounded-full animate-pulse">
+                Draf Belum Disimpan
+              </span>
+            )}
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Konfigurasikan meta-tag Open Graph untuk memoles tampilan link Anda saat dibagikan ke medsos atau aplikasi chat.
+          </p>
+        </div>
+
+        {/* UNDO / REDO / BATAL / SIMPAN BAR */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Undo */}
+          <button
+            onClick={undo}
+            disabled={!canUndo || isSaving}
+            title="Undo"
+            className="p-2 h-10 w-10 rounded-xl border border-white/10 bg-slate-900 text-slate-300 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:pointer-events-none transition-all duration-200"
+          >
+            <RotateCcw className="w-4 h-4 mx-auto" />
+          </button>
+          
+          {/* Redo */}
+          <button
+            onClick={redo}
+            disabled={!canRedo || isSaving}
+            title="Redo"
+            className="p-2 h-10 w-10 rounded-xl border border-white/10 bg-slate-900 text-slate-300 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:pointer-events-none transition-all duration-200"
+          >
+            <RotateCw className="w-4 h-4 mx-auto" />
+          </button>
+
+          {/* Batal */}
+          <button
+            onClick={handleCancelAll}
+            disabled={!hasPendingChanges || isSaving}
+            className="px-4 h-10 rounded-xl border border-red-500/20 text-red-400 hover:bg-red-500/10 hover:border-red-500/30 text-xs font-semibold disabled:opacity-30 disabled:pointer-events-none transition-all duration-200 flex items-center gap-1.5"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Batal</span>
+          </button>
+
+          {/* Simpan Perubahan */}
+          <button
+            onClick={saveDraft}
+            disabled={!hasPendingChanges || isSaving}
+            className={`px-5 h-10 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-1.5 shadow-lg
+              ${hasPendingChanges 
+                ? 'bg-settings-accent hover:opacity-90 text-white shadow-blue-500/10' 
+                : 'bg-white/5 text-slate-500 border border-white/5 disabled:pointer-events-none'
+              }
+            `}
+          >
+            {isSaving ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span>Menyimpan...</span>
+              </>
+            ) : saveSuccess ? (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>Tersimpan!</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-3.5 h-3.5" />
+                <span>Simpan Perubahan</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ERROR PANEL */}
+      {error && (
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
+          <Info className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* BODY CONFIG */}
+      <div className="p-6 rounded-2xl border border-white/10 bg-slate-900/40 backdrop-blur-sm space-y-6">
+        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+          <h3 className="font-semibold text-sm text-slate-300">Optimasi SEO & Pratinjau Tautan (Open Graph)</h3>
+          <Share2 className="w-4 h-4 text-slate-500" />
+        </div>
+
+        <p className="text-xs text-slate-400 leading-relaxed bg-blue-500/5 border border-blue-500/10 p-3.5 rounded-xl">
+          <Info className="w-4 h-4 text-blue-400 inline-block mr-1.5 -translate-y-0.5" />
+          Data di bawah ini digunakan saat tautan profil dibagikan ke platform perpesanan seperti WhatsApp, Telegram, LINE, Discord, atau media sosial seperti Facebook dan Twitter.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* OG Title */}
+          <div className="space-y-1.5">
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">
+              JUDUL OPEN GRAPH (OG:TITLE)
+            </label>
+            <input
+              type="text"
+              value={settings.og_title}
+              onChange={(e) => updateData(prev => ({ ...prev, og_title: e.target.value }))}
+              placeholder="Contoh: Media Sosial Resmi ReyLan"
+              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-neutral-950 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-settings-accent"
+            />
+          </div>
+
+          {/* OG Description */}
+          <div className="space-y-1.5">
+            <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">
+              DESKRIPSI OPEN GRAPH (OG:DESCRIPTION)
+            </label>
+            <input
+              type="text"
+              value={settings.og_description}
+              onChange={(e) => updateData(prev => ({ ...prev, og_description: e.target.value }))}
+              placeholder="Tulis ringkasan info saat dibagikan..."
+              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-neutral-950 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-settings-accent"
+            />
+          </div>
+        </div>
+
+        {/* OG Image */}
+        <div className="space-y-4 p-4 rounded-xl border border-white/5 bg-black/10">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="w-24 h-16 rounded-lg overflow-hidden border border-white/10 bg-slate-950 shrink-0 flex items-center justify-center">
+              {getOgImagePreview() ? (
+                <img
+                  src={getOgImagePreview()}
+                  alt="SEO Preview"
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <span className="text-[10px] text-slate-500 font-mono">No Image</span>
+              )}
+            </div>
+            <div className="text-xs text-slate-400 space-y-1 my-auto">
+              <p className="font-semibold text-slate-300">Gambar Preview Open Graph (og:image)</p>
+              <p>Rekomendasi ukuran: 1200x630px untuk visual media sosial terbaik.</p>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <div>
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                URL GAMBAR OG LANGSUNG
+              </label>
+              <input
+                type="url"
+                value={settings.og_image_url || ''}
+                onChange={(e) => updateData(prev => ({ ...prev, og_image_url: e.target.value }))}
+                placeholder="https://example.com/banner-seo.png"
+                className="w-full px-3 py-2 rounded-xl border border-white/10 bg-neutral-950 text-white placeholder-slate-600 text-xs focus:outline-none focus:border-settings-accent"
+              />
+            </div>
+
+            <div className="relative">
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">
+                ATAU UNGGAH BANNER BARU (.png / .jpg)
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                className="hidden"
+                id="upload-og-banner-file"
+              />
+              <label
+                htmlFor="upload-og-banner-file"
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl border border-dashed border-white/20 hover:border-white/40 bg-white/5 text-xs font-semibold cursor-pointer text-slate-300 hover:text-white transition-all duration-300"
+              >
+                <Upload className="w-4 h-4" />
+                <span>{ogImageFile ? `File Terpilih: ${ogImageFile.name.substring(0, 20)}...` : 'Pilih Gambar Banner (.png / .jpg)'}</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  );
+}

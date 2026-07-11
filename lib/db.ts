@@ -23,6 +23,23 @@ export interface SiteSettings {
   admin_password_hash: string;
   created_at?: string;
   updated_at?: string;
+  
+  // Kolom baru
+  tagline_text?: string;
+  profile_glow_mode?: 'solid' | 'gradient';
+  profile_glow_color_start?: string;
+  profile_glow_color_end?: string;
+  profile_glow_direction?: 'radial' | 'linear';
+  settings_accent_color?: string;
+  settings_logo_url?: string | null;
+  settings_navbar_title?: string;
+  settings_navbar_subtitle?: string;
+  disable_zoom?: boolean;
+  disable_scroll?: boolean;
+  disable_image_save?: boolean;
+  disable_text_select?: boolean;
+  disable_pull_refresh?: boolean;
+  disable_link_preview?: boolean;
 }
 
 export interface SocialButton {
@@ -122,6 +139,21 @@ const DEFAULT_SETTINGS: SiteSettings = {
   backsound_enabled: true,
   footer_text: '© 2026 ReyLan. All rights reserved.',
   admin_password_hash: DEFAULT_PASSWORD_HASH,
+  tagline_text: 'OFFICIAL LINK-IN-BIO',
+  profile_glow_mode: 'solid',
+  profile_glow_color_start: '#8083ff',
+  profile_glow_color_end: '#ffb0cd',
+  profile_glow_direction: 'radial',
+  settings_accent_color: '#3b82f6',
+  settings_logo_url: null,
+  settings_navbar_title: 'ReyLan Admin',
+  settings_navbar_subtitle: 'Dashboard V1.0',
+  disable_zoom: false,
+  disable_scroll: false,
+  disable_image_save: false,
+  disable_text_select: false,
+  disable_pull_refresh: false,
+  disable_link_preview: false,
 };
 
 const DEFAULT_BUTTONS: SocialButton[] = [
@@ -508,6 +540,8 @@ export const uploadFileToStorage = async (
     fileName = `backsound${ext}`;
   } else if (bucketName === 'og-image') {
     fileName = `og-image${ext}`;
+  } else if (bucketName === 'logo-navbar-settings') {
+    fileName = `logo-navbar-settings${ext}`;
   } else if (bucketName === 'logo-medsos') {
     const id = customId || crypto.randomUUID();
     fileName = `logo-medsos-${id}${ext}`;
