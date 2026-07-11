@@ -8,6 +8,8 @@ import { BackgroundImage } from '@/lib/db';
 interface BackgroundMediaProps {
   url: string | null;
   type: 'image' | 'gif' | 'video';
+  desktopUrl: string | null;
+  desktopType: 'image' | 'gif' | 'video';
   mobileImages: BackgroundImage[];
   desktopImages: BackgroundImage[];
   mobileInterval: number;
@@ -18,6 +20,8 @@ interface BackgroundMediaProps {
 export default function BackgroundMedia({ 
   url, 
   type, 
+  desktopUrl,
+  desktopType,
   mobileImages, 
   desktopImages, 
   mobileInterval, 
@@ -25,22 +29,30 @@ export default function BackgroundMedia({
   isMobile 
 }: BackgroundMediaProps) {
   const [currentIdx, setCurrentIdx] = React.useState(0);
-  const images = isMobile ? mobileImages : desktopImages;
-  const interval = isMobile ? mobileInterval : desktopInterval;
+  
+  const activeImages = isMobile ? mobileImages : desktopImages;
+  const activeInterval = isMobile ? mobileInterval : desktopInterval;
+  const activeType = isMobile ? type : desktopType;
+  const activeUrl = isMobile ? url : desktopUrl;
 
   // Slideshow logic
   React.useEffect(() => {
-    if (images.length <= 1 || type !== 'image') return;
+    if (activeImages.length <= 1 || activeType !== 'image') return;
     
     const timer = setInterval(() => {
-      setCurrentIdx((prev) => (prev + 1) % images.length);
-    }, interval * 1000);
+      setCurrentIdx((prev) => (prev + 1) % activeImages.length);
+    }, activeInterval * 1000);
 
     return () => clearInterval(timer);
-  }, [images.length, interval, type]);
+  }, [activeImages.length, activeInterval, activeType]);
 
-  // Fallback to default if no images/url
-  if ((!url && images.length === 0)) {
+  // Reset index when switching between mobile/desktop or when images change
+  React.useEffect(() => {
+    setCurrentIdx(0);
+  }, [isMobile, activeImages.length]);
+
+  // Fallback to default if no media available
+  if ((!activeUrl && activeImages.length === 0)) {
     return (
       <div className="absolute inset-0 -z-50 bg-radial from-neutral-900 via-neutral-950 to-black">
         <div className="absolute inset-0 bg-black/40" />
@@ -48,30 +60,12 @@ export default function BackgroundMedia({
     );
   }
 
-  const renderSlideshow = () => (
-    <AnimatePresence mode="wait">
-      <motion.img
-        key={images[currentIdx]?.id || 'static'}
-        src={images.length > 0 ? images[currentIdx].image_url : (url || '')}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 1.5, ease: 'easeInOut' }}
-        className="absolute inset-0 w-full h-full object-cover scale-105"
-        referrerPolicy="no-referrer"
-      />
-    </AnimatePresence>
-  );
-
-  return (
-    <div className="absolute inset-0 -z-50 overflow-hidden w-full h-full select-none pointer-events-none">
-      {/* Gelap overlay untuk kenyamanan membaca teks */}
-      <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] z-10" />
-
-      {type === 'video' ? (
+  const renderContent = () => {
+    if (activeType === 'video') {
+      return (
         <video
-          key={url}
-          src={url || ''}
+          key={activeUrl}
+          src={activeUrl || ''}
           autoPlay
           muted
           loop
@@ -79,9 +73,43 @@ export default function BackgroundMedia({
           controls={false}
           className="w-full h-full object-cover scale-105"
         />
-      ) : (
-        renderSlideshow()
-      )}
+      );
+    }
+
+    if (activeType === 'gif') {
+      return (
+        <img
+          src={activeUrl || ''}
+          alt="Latar Belakang Animasi"
+          className="w-full h-full object-cover scale-105"
+          referrerPolicy="no-referrer"
+        />
+      );
+    }
+
+    // Default to Slideshow for type 'image'
+    return (
+      <AnimatePresence mode="wait">
+        <motion.img
+          key={activeImages[currentIdx]?.id || 'static'}
+          src={activeImages.length > 0 ? activeImages[currentIdx].image_url : (activeUrl || '')}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 1.5, ease: 'easeInOut' }}
+          className="absolute inset-0 w-full h-full object-cover scale-105"
+          referrerPolicy="no-referrer"
+        />
+      </AnimatePresence>
+    );
+  };
+
+  return (
+    <div className="absolute inset-0 -z-50 overflow-hidden w-full h-full select-none pointer-events-none">
+      {/* Gelap overlay untuk kenyamanan membaca teks */}
+      <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] z-10" />
+
+      {renderContent()}
     </div>
   );
 }

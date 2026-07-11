@@ -16,6 +16,8 @@ export interface SiteSettings {
   og_image_url: string | null;
   background_url: string | null;
   background_type: 'image' | 'gif' | 'video';
+  desktop_background_url: string | null;
+  desktop_background_type: 'image' | 'gif' | 'video';
   backsound_url: string | null;
   backsound_volume: number;
   backsound_enabled: boolean;
@@ -157,6 +159,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   og_image_url: 'https://picsum.photos/seed/reylan_og/1200/630',
   background_url: 'https://picsum.photos/seed/reylan_bg/1920/1080',
   background_type: 'image',
+  desktop_background_url: 'https://picsum.photos/seed/reylan_bg_desktop/1920/1080',
+  desktop_background_type: 'image',
   backsound_url: null,
   backsound_volume: 50,
   backsound_enabled: true,
@@ -688,9 +692,13 @@ export const uploadFileToStorage = async (
   } else if (bucketName === 'favicon') {
     fileName = `favicon${ext}`;
   } else if (bucketName === 'background' || bucketName === 'background-desktop') {
-    // Jika ada customId (misal urutan atau ID), gunakan itu agar tidak menimpa
-    const id = customId || Date.now();
-    fileName = `background${id}${ext}`;
+    // Penamaan khusus sesuai permintaan user
+    if (customId === 'anim') {
+      fileName = `bg-anim${ext}`;
+    } else {
+      const id = customId || Date.now();
+      fileName = `background${id}${ext}`;
+    }
   } else if (bucketName === 'backsound') {
     // Jika ada customId (misal urutan atau ID), gunakan itu agar tidak menimpa
     const id = customId || Date.now();

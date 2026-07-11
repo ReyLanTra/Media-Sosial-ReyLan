@@ -45,6 +45,8 @@ export default function ProfileView({
       favicon_url: null,
       background_url: 'https://picsum.photos/seed/reylan_bg/1920/1080',
       background_type: 'image' as const,
+      desktop_background_url: 'https://picsum.photos/seed/reylan_bg_desktop/1920/1080',
+      desktop_background_type: 'image' as const,
       backsound_url: null,
       backsound_volume: 50,
       backsound_enabled: true,
@@ -297,6 +299,8 @@ export default function ProfileView({
       <BackgroundMedia 
         url={settings.background_url} 
         type={settings.background_type}
+        desktopUrl={settings.desktop_background_url}
+        desktopType={settings.desktop_background_type}
         mobileImages={mobileBgImages}
         desktopImages={desktopBgImages}
         mobileInterval={settings.mobile_bg_slideshow_interval || 5}

@@ -158,26 +158,52 @@ export default function LatarMusikClient({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // Tentukan tipe berdasarkan ekstensi file
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const isAnim = ext === 'gif' || ext === 'mp4';
+    const type = ext === 'mp4' ? 'video' : 'image';
+
     setUploadingMobile(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('bucket', 'background');
-      formData.append('customId', (mobileBgImages.length + 1).toString());
+      
+      if (isAnim) {
+        formData.append('customId', 'anim');
+      } else {
+        formData.append('customId', (mobileBgImages.length + 1).toString());
+      }
+      
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const resData = await res.json();
-      if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah gambar.');
+      if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah media.');
 
-      const newImg = await addBgImage({
-        device_type: 'mobile',
-        image_url: resData.url,
-        display_order: mobileBgImages.length
-      });
-      setMobileBgImages([...mobileBgImages, newImg]);
+      if (isAnim) {
+        // Jika animasi, update settings utama
+        updateData(prev => ({ 
+          ...prev,
+          background_url: resData.url,
+          background_type: type
+        }));
+      } else {
+        // Jika gambar, tambahkan ke slideshow
+        const newImg = await addBgImage({
+          device_type: 'mobile',
+          image_url: resData.url,
+          display_order: mobileBgImages.length
+        });
+        setMobileBgImages([...mobileBgImages, newImg]);
+        // Pastikan tipe di-set ke image (slideshow)
+        if (settings?.background_type !== 'image') {
+          updateData(prev => ({ ...prev, background_type: 'image' }));
+        }
+      }
     } catch (err: any) {
       alert(err.message);
     } finally {
       setUploadingMobile(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -185,47 +211,53 @@ export default function LatarMusikClient({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validasi tipe PNG
-    if (file.type !== 'image/png') {
-      alert('Gagal: Latar belakang desktop harus berformat PNG.');
-      return;
-    }
+    // Tentukan tipe berdasarkan ekstensi file
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const isAnim = ext === 'gif' || ext === 'mp4';
+    const type = ext === 'mp4' ? 'video' : 'image';
 
-    // Validasi Rasio 16:9
-    const img = new Image();
-    img.src = URL.createObjectURL(file);
-    img.onload = async () => {
-      const ratio = img.width / img.height;
-      const targetRatio = 16 / 9;
-      const tolerance = 0.05; // toleransi 5%
-
-      if (Math.abs(ratio - targetRatio) > tolerance) {
-        alert(`Gagal: Rasio gambar harus 16:9 (lebar: ${img.width}, tinggi: ${img.height}, rasio: ${ratio.toFixed(2)}). Rasio yang diunggah tidak mendekati 1.78.`);
-        return;
+    setUploadingDesktop(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'background-desktop');
+      
+      if (isAnim) {
+        formData.append('customId', 'anim');
+      } else {
+        formData.append('customId', (desktopBgImages.length + 1).toString());
       }
 
-      setUploadingDesktop(true);
-      try {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('bucket', 'background-desktop');
-        formData.append('customId', (desktopBgImages.length + 1).toString());
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        const resData = await res.json();
-        if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah gambar.');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const resData = await res.json();
+      if (!res.ok || !resData.success) throw new Error(resData.error || 'Gagal mengunggah media.');
 
+      if (isAnim) {
+        // Jika animasi, update settings desktop
+        updateData(prev => ({ 
+          ...prev,
+          desktop_background_url: resData.url,
+          desktop_background_type: type
+        }));
+      } else {
+        // Jika gambar, tambahkan ke slideshow
         const newImg = await addBgImage({
           device_type: 'desktop',
           image_url: resData.url,
           display_order: desktopBgImages.length
         });
         setDesktopBgImages([...desktopBgImages, newImg]);
-      } catch (err: any) {
-        alert(err.message);
-      } finally {
-        setUploadingDesktop(false);
+        // Pastikan tipe desktop di-set ke image (slideshow)
+        if (settings?.desktop_background_type !== 'image') {
+          updateData(prev => ({ ...prev, desktop_background_type: 'image' }));
+        }
       }
-    };
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setUploadingDesktop(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleMusicUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -439,17 +471,34 @@ export default function LatarMusikClient({
                 </div>
               ))}
               <label className={`flex flex-col items-center justify-center aspect-[9/16] rounded-lg border border-dashed border-white/20 hover:border-white/40 bg-white/5 cursor-pointer transition-all hover:bg-white/10 ${uploadingMobile ? 'opacity-50 pointer-events-none' : ''}`}>
-                <input type="file" accept="image/*" onChange={handleMobileBgUpload} className="hidden" />
+                <input type="file" accept="image/*,video/mp4" onChange={handleMobileBgUpload} className="hidden" />
                 {uploadingMobile ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <>
                     <Plus className="w-5 h-5 text-slate-400" />
-                    <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter text-center px-1">Tambah Gambar</span>
+                    <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter text-center px-1">Unggah (PNG/GIF/MP4)</span>
                   </>
                 )}
               </label>
             </div>
+
+            {/* Preview Animated Mobile */}
+            {(settings.background_type === 'gif' || settings.background_type === 'video') && settings.background_url && (
+              <div className="space-y-2 p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
+                <div className="flex justify-between items-center text-[10px] font-mono text-blue-400 uppercase tracking-wider">
+                  <span>ANIMASI MOBILE AKTIF ({settings.background_type})</span>
+                  <button onClick={() => updateData(prev => ({ ...prev, background_url: null, background_type: 'image' }))} className="text-red-400 hover:text-red-300">HAPUS</button>
+                </div>
+                <div className="relative aspect-video rounded-lg overflow-hidden border border-white/10 bg-black/40">
+                  {settings.background_type === 'video' ? (
+                    <video src={settings.background_url} autoPlay muted loop className="w-full h-full object-cover" />
+                  ) : (
+                    <img src={settings.background_url} alt="Mobile Anim" className="w-full h-full object-cover" />
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* DESKTOP BACKGROUND SECTION */}
@@ -457,14 +506,14 @@ export default function LatarMusikClient({
             <div className="flex items-center justify-between border-b border-white/5 pb-3">
               <div className="flex items-center gap-2">
                 <Monitor className="w-4 h-4 text-emerald-400" />
-                <h3 className="font-semibold text-sm text-slate-300">Background Desktop (16:9 PNG)</h3>
+                <h3 className="font-semibold text-sm text-slate-300">Background Desktop</h3>
               </div>
               <Sliders className="w-4 h-4 text-slate-500" />
             </div>
 
-            <p className="text-[10px] text-slate-400 bg-amber-500/5 border border-amber-500/10 p-3 rounded-xl">
-              <Info className="w-3.5 h-3.5 text-amber-400 inline-block mr-1.5" />
-              Format wajib <strong>PNG</strong> dengan rasio <strong>16:9</strong>. Sistem akan menolak gambar dengan rasio berbeda.
+            <p className="text-[10px] text-slate-400 bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl">
+              <Info className="w-3.5 h-3.5 text-emerald-400 inline-block mr-1.5" />
+              Gunakan rasio <strong>16:9</strong>. PNG akan masuk ke <strong>Slideshow</strong>. GIF/MP4 akan menjadi <strong>Background Tunggal</strong>.
             </p>
 
             {/* Slideshow Interval Desktop */}
@@ -500,17 +549,34 @@ export default function LatarMusikClient({
                 </div>
               ))}
               <label className={`flex flex-col items-center justify-center aspect-video rounded-lg border border-dashed border-white/20 hover:border-white/40 bg-white/5 cursor-pointer transition-all hover:bg-white/10 ${uploadingDesktop ? 'opacity-50 pointer-events-none' : ''}`}>
-                <input type="file" accept="image/png" onChange={handleDesktopBgUpload} className="hidden" />
+                <input type="file" accept="image/*,video/mp4" onChange={handleDesktopBgUpload} className="hidden" />
                 {uploadingDesktop ? (
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <>
                     <Plus className="w-5 h-5 text-slate-400" />
-                    <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">Tambah Desktop PNG</span>
+                    <span className="text-[9px] font-bold text-slate-500 mt-1 uppercase tracking-tighter">Unggah (PNG/GIF/MP4)</span>
                   </>
                 )}
               </label>
             </div>
+
+            {/* Preview Animated Desktop */}
+            {(settings.desktop_background_type === 'gif' || settings.desktop_background_type === 'video') && settings.desktop_background_url && (
+              <div className="space-y-2 p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
+                <div className="flex justify-between items-center text-[10px] font-mono text-emerald-400 uppercase tracking-wider">
+                  <span>ANIMASI DESKTOP AKTIF ({settings.desktop_background_type})</span>
+                  <button onClick={() => updateData(prev => ({ ...prev, desktop_background_url: null, desktop_background_type: 'image' }))} className="text-red-400 hover:text-red-300">HAPUS</button>
+                </div>
+                <div className="relative aspect-video rounded-lg overflow-hidden border border-white/10 bg-black/40">
+                  {settings.desktop_background_type === 'video' ? (
+                    <video src={settings.desktop_background_url} autoPlay muted loop className="w-full h-full object-cover" />
+                  ) : (
+                    <img src={settings.desktop_background_url} alt="Desktop Anim" className="w-full h-full object-cover" />
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
