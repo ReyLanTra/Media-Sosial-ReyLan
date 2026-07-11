@@ -54,11 +54,21 @@ export default function KeamananClient({ initialSettings }: KeamananClientProps)
       disable_text_select: currentData.disable_text_select,
       disable_pull_refresh: currentData.disable_pull_refresh,
       disable_link_preview: currentData.disable_link_preview,
+      allow_desktop_access: currentData.allow_desktop_access,
+      allow_mobile_access: currentData.allow_mobile_access,
     });
 
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   });
+
+  const handleSave = () => {
+    if (!settings.allow_desktop_access && !settings.allow_mobile_access) {
+      alert('Gagal: Minimal satu jenis perangkat (Desktop atau Mobile) harus diizinkan untuk mengakses website.');
+      return;
+    }
+    saveDraft();
+  };
 
   // Set flag kotor pada level sessionStorage
   React.useEffect(() => {
@@ -160,7 +170,7 @@ export default function KeamananClient({ initialSettings }: KeamananClientProps)
 
           {/* Simpan Perubahan */}
           <button
-            onClick={saveDraft}
+            onClick={handleSave}
             disabled={!isDirty || isSaving}
             className={`px-5 h-10 rounded-xl text-xs font-bold transition-all duration-300 flex items-center gap-1.5 shadow-lg
               ${isDirty 
@@ -213,6 +223,36 @@ export default function KeamananClient({ initialSettings }: KeamananClientProps)
           </p>
 
           <div className="space-y-3.5">
+            {/* Toggle Akses Desktop */}
+            <div className="flex items-center justify-between p-4 rounded-xl border border-white/5 bg-black/10">
+              <div className="space-y-0.5">
+                <span className="text-xs font-semibold text-slate-200">Izinkan Akses dari Desktop</span>
+                <p className="text-[10px] text-slate-500">Mengizinkan pengunjung membuka web via komputer/laptop</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={!!settings.allow_desktop_access}
+                onChange={(e) => updateData(prev => ({ ...prev, allow_desktop_access: e.target.checked }))}
+                className="w-4 h-4 rounded accent-settings-accent cursor-pointer shrink-0"
+              />
+            </div>
+
+            {/* Toggle Akses Mobile */}
+            <div className="flex items-center justify-between p-4 rounded-xl border border-white/5 bg-black/10">
+              <div className="space-y-0.5">
+                <span className="text-xs font-semibold text-slate-200">Izinkan Akses dari Mobile</span>
+                <p className="text-[10px] text-slate-500">Mengizinkan pengunjung membuka web via smartphone/tablet</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={!!settings.allow_mobile_access}
+                onChange={(e) => updateData(prev => ({ ...prev, allow_mobile_access: e.target.checked }))}
+                className="w-4 h-4 rounded accent-settings-accent cursor-pointer shrink-0"
+              />
+            </div>
+
+            <div className="h-px bg-white/5 my-2"></div>
+
             {/* Toggle Zoom */}
             <div className="flex items-center justify-between p-4 rounded-xl border border-white/5 bg-black/10">
               <div className="space-y-0.5">

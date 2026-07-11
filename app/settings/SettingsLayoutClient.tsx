@@ -144,7 +144,7 @@ export default function SettingsLayoutClient({
   const settings = React.useMemo(() => {
     return {
       disable_zoom: initialSettings?.disable_zoom ?? false,
-      disable_scroll: initialSettings?.disable_scroll ?? false,
+      disable_scroll: false, // Paksa false agar halaman settings selalu bisa di-scroll
       disable_image_save: initialSettings?.disable_image_save ?? false,
       disable_text_select: initialSettings?.disable_text_select ?? false,
       disable_pull_refresh: initialSettings?.disable_pull_refresh ?? false,
@@ -256,32 +256,19 @@ export default function SettingsLayoutClient({
       }
     }
 
-    // 2. Scroll lock & Zoom lock combined touchmove handler
+    // 2. Zoom lock combined touchmove handler
     const preventTouchMove = (e: TouchEvent) => {
       if (settings.disable_zoom && e.touches.length > 1) {
         e.preventDefault();
         return;
       }
-      if (settings.disable_scroll) {
-        const target = e.target as HTMLElement;
-        if (target.closest('.scrollable-content')) {
-          return; // Izinkan scroll dalam area bento jika diizinkan
-        }
-        e.preventDefault();
-      }
     };
 
-    if (settings.disable_scroll) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.overscrollBehavior = 'none';
-      document.documentElement.style.overflow = 'hidden';
-      document.documentElement.style.overscrollBehavior = 'none';
-    } else {
-      document.body.style.overflow = '';
-      document.body.style.overscrollBehavior = '';
-      document.documentElement.style.overflow = '';
-      document.documentElement.style.overscrollBehavior = '';
-    }
+    // Pastikan halaman settings selalu bisa di-scroll
+    document.body.style.overflow = '';
+    document.body.style.overscrollBehavior = '';
+    document.documentElement.style.overflow = '';
+    document.documentElement.style.overscrollBehavior = '';
 
     // 3. Klik kanan / long-press pada gambar (disable_image_save) & long-press preview link (disable_link_preview)
     const handleGlobalContextMenu = (e: MouseEvent) => {

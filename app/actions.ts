@@ -10,8 +10,17 @@ import {
   updateSocialButton,
   deleteSocialButton,
   deleteFileFromStorage,
+  getBackgroundImages,
+  addBackgroundImage,
+  deleteBackgroundImage,
+  getMusicTracks,
+  addMusicTrack,
+  updateMusicTrack,
+  deleteMusicTrack,
   SiteSettings,
   SocialButton,
+  BackgroundImage,
+  MusicTrack,
   getStatusConfig,
 } from '@/lib/db';
 import { loginAdmin, logoutAdmin, isAuthenticated } from '@/lib/auth';
@@ -148,4 +157,69 @@ export async function reorderButtons(buttons: { id: string; display_order: numbe
 
 export async function getConfigStatus() {
   return getStatusConfig();
+}
+
+// --- BACKGROUND IMAGES ---
+
+export async function getBgImages(deviceType: 'mobile' | 'desktop') {
+  return await getBackgroundImages(deviceType);
+}
+
+export async function addBgImage(data: Omit<BackgroundImage, 'id'>) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  const item = await addBackgroundImage(data);
+  revalidatePath('/');
+  return item;
+}
+
+export async function deleteBgImage(id: string, urlToDelete: string, deviceType: 'mobile' | 'desktop') {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  const bucket = deviceType === 'mobile' ? 'background' : 'background-desktop';
+  await deleteFileFromStorage(bucket, urlToDelete);
+  const success = await deleteBackgroundImage(id);
+  revalidatePath('/');
+  return success;
+}
+
+// --- MUSIC PLAYLIST ---
+
+export async function getTracks() {
+  return await getMusicTracks();
+}
+
+export async function addTrack(data: Omit<MusicTrack, 'id'>) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  const item = await addMusicTrack(data);
+  revalidatePath('/');
+  return item;
+}
+
+export async function updateTrack(id: string, data: Partial<MusicTrack>) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  const item = await updateMusicTrack(id, data);
+  revalidatePath('/');
+  return item;
+}
+
+export async function deleteTrack(id: string, urlToDelete: string) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  await deleteFileFromStorage('backsound', urlToDelete);
+  const success = await deleteMusicTrack(id);
+  revalidatePath('/');
+  return success;
+}
+
+export async function reorderTracks(tracks: { id: string; display_order: number }[]) {
+  const authed = await isAuthenticated();
+  if (!authed) throw new Error('Akses ditolak.');
+  for (const item of tracks) {
+    await updateMusicTrack(item.id, { display_order: item.display_order });
+  }
+  revalidatePath('/');
+  return true;
 }

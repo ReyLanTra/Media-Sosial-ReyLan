@@ -42,6 +42,27 @@ export interface SiteSettings {
   disable_link_preview?: boolean;
   selection_bg_color?: string;
   selection_text_color?: string;
+  allow_desktop_access: boolean;
+  allow_mobile_access: boolean;
+  mobile_bg_slideshow_interval: number;
+  desktop_bg_slideshow_interval: number;
+}
+
+export interface BackgroundImage {
+  id: string;
+  device_type: 'mobile' | 'desktop';
+  image_url: string;
+  display_order: number;
+  created_at?: string;
+}
+
+export interface MusicTrack {
+  id: string;
+  title: string | null;
+  audio_url: string;
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface SocialButton {
@@ -158,6 +179,10 @@ const DEFAULT_SETTINGS: SiteSettings = {
   disable_link_preview: false,
   selection_bg_color: '#3b82f6',
   selection_text_color: '#ffffff',
+  allow_desktop_access: true,
+  allow_mobile_access: true,
+  mobile_bg_slideshow_interval: 5,
+  desktop_bg_slideshow_interval: 5,
 };
 
 const DEFAULT_BUTTONS: SocialButton[] = [
@@ -435,6 +460,135 @@ export const deleteSocialButton = async (id: string): Promise<boolean> => {
     }
     return false;
   }
+};
+
+// --- BACKGROUND IMAGES ACTIONS ---
+
+export const getBackgroundImages = async (deviceType: 'mobile' | 'desktop'): Promise<BackgroundImage[]> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabasePublic();
+      const { data, error } = await supabase
+        .from('background_images')
+        .select('*')
+        .eq('device_type', deviceType)
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.warn('Supabase get background images error:', error.message);
+        return [];
+      }
+      return (data as BackgroundImage[]) || [];
+    } catch (err: any) {
+      console.error('Supabase error on get background images:', err?.message);
+      return [];
+    }
+  }
+  return [];
+};
+
+export const addBackgroundImage = async (data: Omit<BackgroundImage, 'id'>): Promise<BackgroundImage> => {
+  const newId = crypto.randomUUID();
+  const newItem = { ...data, id: newId };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: inserted, error } = await supabase
+      .from('background_images')
+      .insert([newItem])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return inserted as BackgroundImage;
+  }
+  throw new Error('Supabase tidak dikonfigurasi untuk background images.');
+};
+
+export const deleteBackgroundImage = async (id: string): Promise<boolean> => {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('background_images')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    return true;
+  }
+  return false;
+};
+
+// --- MUSIC TRACKS ACTIONS ---
+
+export const getMusicTracks = async (): Promise<MusicTrack[]> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabasePublic();
+      const { data, error } = await supabase
+        .from('music_tracks')
+        .select('*')
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.warn('Supabase get music tracks error:', error.message);
+        return [];
+      }
+      return (data as MusicTrack[]) || [];
+    } catch (err: any) {
+      console.error('Supabase error on get music tracks:', err?.message);
+      return [];
+    }
+  }
+  return [];
+};
+
+export const addMusicTrack = async (data: Omit<MusicTrack, 'id'>): Promise<MusicTrack> => {
+  const newId = crypto.randomUUID();
+  const newItem = { ...data, id: newId };
+
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: inserted, error } = await supabase
+      .from('music_tracks')
+      .insert([newItem])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return inserted as MusicTrack;
+  }
+  throw new Error('Supabase tidak dikonfigurasi untuk music tracks.');
+};
+
+export const updateMusicTrack = async (id: string, data: Partial<MusicTrack>): Promise<MusicTrack> => {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { data: updated, error } = await supabase
+      .from('music_tracks')
+      .update({ ...data, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return updated as MusicTrack;
+  }
+  throw new Error('Supabase tidak dikonfigurasi untuk music tracks.');
+};
+
+export const deleteMusicTrack = async (id: string): Promise<boolean> => {
+  if (isSupabaseConfigured()) {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from('music_tracks')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+    return true;
+  }
+  return false;
 };
 
 // --- LOGIKA STORAGE (UNGGAH & HAPUS FILE) ---

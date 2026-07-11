@@ -1,114 +1,129 @@
 'use client';
 
 import * as React from 'react';
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Play, Pause, Music, SkipForward } from 'lucide-react';
+import { MusicTrack } from '@/lib/db';
 
 interface AudioPlayerProps {
-  url: string | null;
+  tracks: MusicTrack[];
   volume: number; // 0 s.d 100
   enabled: boolean;
 }
 
-export default function AudioPlayer({ url, volume, enabled }: AudioPlayerProps) {
+export default function AudioPlayer({ tracks, volume, enabled }: AudioPlayerProps) {
   const [isPlaying, setIsPlaying] = React.useState(false);
-  const [hasError, setHasError] = React.useState(false);
+  const [currentTrackIdx, setCurrentTrackIdx] = React.useState(0);
   const [showTooltip, setShowTooltip] = React.useState(true);
+  const [position, setPosition] = React.useState({ x: 0, y: 0 });
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
+  // Load position from localStorage
   React.useEffect(() => {
-    let timerId: NodeJS.Timeout;
-    let errorTimerId: NodeJS.Timeout;
+    const savedPos = localStorage.getItem('audio_button_pos');
+    if (savedPos) {
+      try {
+        setPosition(JSON.parse(savedPos));
+      } catch (e) {
+        console.error('Error parsing saved position');
+      }
+    } else {
+      // Default position: bottom right
+      setPosition({ x: window.innerWidth - 80, y: window.innerHeight - 80 });
+    }
+  }, []);
 
-    // Jika tidak ada URL, dinonaktifkan, atau terjadi error sebelumnya, bersihkan instansi audio
-    if (!url || !enabled) {
+  const currentTrack = tracks[currentTrackIdx];
+
+  // Initialize and handle playlist auto-next
+  React.useEffect(() => {
+    if (!currentTrack || !enabled) {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      timerId = setTimeout(() => {
-        setIsPlaying(false);
-      }, 0);
-      return () => clearTimeout(timerId);
+      setIsPlaying(false);
+      return;
     }
 
-    errorTimerId = setTimeout(() => {
-      setHasError(false);
-    }, 0);
-
-    const audio = new Audio(url);
-    audio.loop = true;
+    const audio = new Audio(currentTrack.audio_url);
     audio.volume = volume / 100;
     audioRef.current = audio;
 
-    audio.onerror = () => {
-      console.warn('Gagal memuat audio musik latar belakang dari URL:', url);
-      setHasError(true);
-      setIsPlaying(false);
+    audio.onended = () => {
+      // Auto next
+      setCurrentTrackIdx((prev) => (prev + 1) % tracks.length);
     };
 
+    if (isPlaying) {
+      audio.play().catch(console.error);
+    }
+
     return () => {
-      clearTimeout(errorTimerId);
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
     };
-  }, [url, enabled, volume]);
+  }, [currentTrackIdx, tracks.length, enabled, currentTrack, isPlaying, volume]);
 
-  // Pantau perubahan volume secara real-time dari panel pengaturan
+  // Volume control
   React.useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = volume / 100;
     }
   }, [volume]);
 
-  // Dengarkan event kustom 'play-backsound' dari layar Klik Untuk Masuk
+  // Listen for custom 'play-backsound'
   React.useEffect(() => {
     const handlePlayEvent = () => {
-      if (audioRef.current && !hasError) {
+      if (audioRef.current && !isPlaying) {
         setShowTooltip(false);
         audioRef.current.play()
-          .then(() => {
-            setIsPlaying(true);
-          })
-          .catch((err) => {
-            console.error('Gagal memutar audio dari event kustom:', err);
-          });
+          .then(() => setIsPlaying(true))
+          .catch(console.error);
       }
     };
-
     window.addEventListener('play-backsound', handlePlayEvent);
-    return () => {
-      window.removeEventListener('play-backsound', handlePlayEvent);
-    };
-  }, [hasError]);
+    return () => window.removeEventListener('play-backsound', handlePlayEvent);
+  }, [isPlaying]);
 
   const togglePlay = () => {
-    if (!audioRef.current || hasError) return;
-
+    if (!audioRef.current) return;
     setShowTooltip(false);
-
     if (isPlaying) {
       audioRef.current.pause();
       setIsPlaying(false);
     } else {
       audioRef.current.play()
-        .then(() => {
-          setIsPlaying(true);
-        })
-        .catch((err) => {
-          console.error('Pemutaran musik diblokir oleh sistem keamanan browser, memerlukan ketukan pengguna:', err);
-        });
+        .then(() => setIsPlaying(true))
+        .catch(console.error);
     }
   };
 
-  if (!url || !enabled) return null;
+  const handleDragEnd = (event: any, info: any) => {
+    const { x, y } = info.point;
+    const screenWidth = window.innerWidth;
+    const snapTo = x < screenWidth / 2 ? 24 : screenWidth - 72; // Snap to left or right side (24px padding)
+    
+    const newPos = { x: snapTo, y };
+    setPosition(newPos);
+    localStorage.setItem('audio_button_pos', JSON.stringify(newPos));
+  };
+
+  if (tracks.length === 0 || !enabled) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[9999] flex items-center gap-3">
-      {/* Tooltip Petunjuk Interaksi */}
+    <motion.div 
+      drag
+      dragMomentum={false}
+      onDragEnd={handleDragEnd}
+      animate={{ x: position.x, y: position.y }}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      className="fixed top-0 left-0 z-[9999] flex flex-col items-center gap-2 touch-none"
+    >
       {showTooltip && (
-        <div className="bg-black/80 backdrop-blur-md border border-white/10 text-[11px] font-sans text-blue-200 px-3 py-1.5 rounded-xl shadow-xl animate-bounce whitespace-nowrap select-none pointer-events-none">
+        <div className="absolute bottom-full mb-3 bg-black/80 backdrop-blur-md border border-white/10 text-[11px] font-sans text-blue-200 px-3 py-1.5 rounded-xl shadow-xl animate-bounce whitespace-nowrap select-none pointer-events-none">
           🎵 Sentuh untuk Musik
         </div>
       )}
@@ -120,9 +135,7 @@ export default function AudioPlayer({ url, volume, enabled }: AudioPlayerProps) 
             ? 'bg-blue-500/25 border-blue-400/50 text-blue-300 ring-4 ring-blue-500/10' 
             : 'bg-black/40 border-white/20 text-slate-300 hover:text-white hover:bg-white/10 animate-pulse'
         }`}
-        title={isPlaying ? 'Matikan Musik' : 'Putar Musik'}
       >
-        {/* Glow Ring behind button */}
         <div className={`absolute -inset-1 rounded-full blur-md opacity-40 transition-opacity group-hover:opacity-100 ${
           isPlaying ? 'bg-blue-500' : 'bg-white'
         }`}></div>
@@ -131,7 +144,6 @@ export default function AudioPlayer({ url, volume, enabled }: AudioPlayerProps) 
           {isPlaying ? (
             <div className="flex items-center gap-1">
               <Pause className="w-5 h-5 animate-pulse" />
-              {/* Visualizer Bar Kecil */}
               <div className="flex items-end gap-[1.5px] h-3.5">
                 <span className="w-[1.5px] bg-blue-300 rounded-full animate-[bounce_1s_infinite_100ms] h-2"></span>
                 <span className="w-[1.5px] bg-blue-300 rounded-full animate-[bounce_0.8s_infinite_300ms] h-3.5"></span>
@@ -139,13 +151,20 @@ export default function AudioPlayer({ url, volume, enabled }: AudioPlayerProps) 
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center">
-              <Play className="w-5 h-5 opacity-80 group-hover:scale-110 transition-transform duration-300" />
-            </div>
+            <Play className="w-5 h-5 opacity-80" />
           )}
         </div>
       </button>
-    </div>
+
+      {isPlaying && tracks.length > 1 && (
+        <button 
+          onClick={() => setCurrentTrackIdx((prev) => (prev + 1) % tracks.length)}
+          className="w-8 h-8 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 transition-all"
+        >
+          <SkipForward className="w-4 h-4" />
+        </button>
+      )}
+    </motion.div>
   );
 }
 

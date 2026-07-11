@@ -28,7 +28,8 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  DragEndEvent
+  DragEndEvent,
+  DragStartEvent
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -149,6 +150,18 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
 
   const [saveSuccess, setSaveSuccess] = React.useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = React.useState(false);
+  const [isDragging, setIsDragging] = React.useState(false);
+
+  // Scroll lock effect
+  React.useEffect(() => {
+    if (isDragging) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+    }
+  }, [isDragging]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -162,8 +175,13 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
     })
   );
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setIsDragging(true);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    setIsDragging(false);
 
     if (over && active.id !== over.id) {
       updateData((prev) => {
@@ -483,6 +501,7 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
             >
               <SortableContext

@@ -2,22 +2,66 @@
 
 import * as React from 'react';
 
+import { motion, AnimatePresence } from 'motion/react';
+import { BackgroundImage } from '@/lib/db';
+
 interface BackgroundMediaProps {
   url: string | null;
   type: 'image' | 'gif' | 'video';
+  mobileImages: BackgroundImage[];
+  desktopImages: BackgroundImage[];
+  mobileInterval: number;
+  desktopInterval: number;
+  isMobile: boolean;
 }
 
-export default function BackgroundMedia({ url, type }: BackgroundMediaProps) {
-  const [hasError, setHasError] = React.useState(false);
+export default function BackgroundMedia({ 
+  url, 
+  type, 
+  mobileImages, 
+  desktopImages, 
+  mobileInterval, 
+  desktopInterval,
+  isMobile 
+}: BackgroundMediaProps) {
+  const [currentIdx, setCurrentIdx] = React.useState(0);
+  const images = isMobile ? mobileImages : desktopImages;
+  const interval = isMobile ? mobileInterval : desktopInterval;
 
-  // Jika tidak ada URL latar belakang, gunakan kecerahan gelap radial default yang indah
-  if (!url || hasError) {
+  // Slideshow logic
+  React.useEffect(() => {
+    if (images.length <= 1 || type !== 'image') return;
+    
+    const timer = setInterval(() => {
+      setCurrentIdx((prev) => (prev + 1) % images.length);
+    }, interval * 1000);
+
+    return () => clearInterval(timer);
+  }, [images.length, interval, type]);
+
+  // Fallback to default if no images/url
+  if ((!url && images.length === 0)) {
     return (
       <div className="absolute inset-0 -z-50 bg-radial from-neutral-900 via-neutral-950 to-black">
         <div className="absolute inset-0 bg-black/40" />
       </div>
     );
   }
+
+  const renderSlideshow = () => (
+    <AnimatePresence mode="wait">
+      <motion.img
+        key={images[currentIdx]?.id || 'static'}
+        src={images.length > 0 ? images[currentIdx].image_url : (url || '')}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 1.5, ease: 'easeInOut' }}
+        className="absolute inset-0 w-full h-full object-cover scale-105"
+        referrerPolicy="no-referrer"
+      />
+    </AnimatePresence>
+  );
 
   return (
     <div className="absolute inset-0 -z-50 overflow-hidden w-full h-full select-none pointer-events-none">
@@ -26,24 +70,17 @@ export default function BackgroundMedia({ url, type }: BackgroundMediaProps) {
 
       {type === 'video' ? (
         <video
-          key={url} // Memicu re-render video saat URL diubah di settings
-          src={url}
+          key={url}
+          src={url || ''}
           autoPlay
           muted
           loop
           playsInline
           controls={false}
-          disablePictureInPicture
           className="w-full h-full object-cover scale-105"
-          onError={() => setHasError(true)}
         />
       ) : (
-        <img
-          src={url}
-          alt="Latar Belakang ReyLan"
-          className="w-full h-full object-cover scale-105 transition-all duration-1000"
-          onError={() => setHasError(true)}
-        />
+        renderSlideshow()
       )}
     </div>
   );
