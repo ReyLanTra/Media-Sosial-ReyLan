@@ -234,13 +234,13 @@ export default function TampilanClient({ initialSettings }: TampilanClientProps)
               </label>
               <input
                 type="text"
-                value={settings.account_name}
-                onChange={(e) => updateData(prev => ({ ...prev, account_name: e.target.value }))}
+                value={settings.og_title || ''}
+                onChange={(e) => updateData(prev => ({ ...prev, og_title: e.target.value }))}
                 placeholder="Media Sosial ReyLan"
-                className="w-full px-4 h-10 rounded-xl border border-white/10 bg-neutral-950 text-white text-xs focus:outline-none"
+                className="w-full px-4 h-10 rounded-xl border border-white/10 bg-neutral-950 text-white text-xs focus:outline-none focus:border-settings-accent"
               />
               <p className="text-[10px] text-slate-500">
-                *Di dalam halaman settings, judul tab browser otomatis diatur menjadi: <code className="px-1.5 py-0.5 rounded bg-black/40 text-blue-400 font-mono text-[9px]">{settings.account_name || 'Nama'} | Pengaturan</code>
+                *Di dalam halaman settings, judul tab browser otomatis diatur menjadi: <code className="px-1.5 py-0.5 rounded bg-black/40 text-blue-400 font-mono text-[9px]">{settings.og_title || 'Nama'} | Pengaturan</code>
               </p>
             </div>
           </div>
