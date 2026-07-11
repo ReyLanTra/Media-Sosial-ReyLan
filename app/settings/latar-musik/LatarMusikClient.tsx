@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useSettingsDraft } from '@/hooks/useSettingsDraft';
-import { updateSettings, uploadMedia } from '@/app/actions';
+import { updateSettings } from '@/app/actions';
 import { SiteSettings } from '@/lib/db';
 import { 
   Upload, 
@@ -21,9 +21,9 @@ interface LatarMusikClientProps {
 }
 
 export default function LatarMusikClient({ initialSettings }: LatarMusikClientProps) {
-  // Pending File Uploads
-  const [backgroundFile, setBackgroundFile] = React.useState<{ base64: string; name: string } | null>(null);
-  const [backsoundFile, setBacksoundFile] = React.useState<{ base64: string; name: string } | null>(null);
+  // Pending File Uploads (menggunakan File murni)
+  const [backgroundFile, setBackgroundFile] = React.useState<File | null>(null);
+  const [backsoundFile, setBacksoundFile] = React.useState<File | null>(null);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
 
   const {
@@ -43,14 +43,24 @@ export default function LatarMusikClient({ initialSettings }: LatarMusikClientPr
 
     // 1. Upload background file kustom jika ada
     if (backgroundFile) {
-      const url = await uploadMedia('background', backgroundFile.base64, backgroundFile.name);
-      finalData.background_url = url;
+      const formData = new FormData();
+      formData.append('file', backgroundFile);
+      formData.append('bucket', 'background');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah latar belakang.');
+      finalData.background_url = data.url;
     }
 
     // 2. Upload backsound file kustom jika ada
     if (backsoundFile) {
-      const url = await uploadMedia('backsound', backsoundFile.base64, backsoundFile.name);
-      finalData.backsound_url = url;
+      const formData = new FormData();
+      formData.append('file', backsoundFile);
+      formData.append('bucket', 'backsound');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah musik latar.');
+      finalData.backsound_url = data.url;
     }
 
     // 3. Simpan perubahan ke database
@@ -81,7 +91,7 @@ export default function LatarMusikClient({ initialSettings }: LatarMusikClientPr
     resetDraft();
   };
 
-  // Convert files to base64
+  // Menangani perubahan file
   const handleFileChange = (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'background' | 'backsound'
@@ -89,16 +99,11 @@ export default function LatarMusikClient({ initialSettings }: LatarMusikClientPr
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      if (type === 'background') {
-        setBackgroundFile({ base64: base64String, name: file.name });
-      } else {
-        setBacksoundFile({ base64: base64String, name: file.name });
-      }
-    };
-    reader.readAsDataURL(file);
+    if (type === 'background') {
+      setBackgroundFile(file);
+    } else {
+      setBacksoundFile(file);
+    }
   };
 
   const hasPendingChanges = isDirty || !!backgroundFile || !!backsoundFile;

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useSettingsDraft } from '@/hooks/useSettingsDraft';
-import { updateSettings, uploadMedia } from '@/app/actions';
+import { updateSettings } from '@/app/actions';
 import { SiteSettings } from '@/lib/db';
 import { 
   Upload, 
@@ -25,8 +25,8 @@ interface TampilanClientProps {
 export default function TampilanClient({ initialSettings }: TampilanClientProps) {
   const router = useRouter();
 
-  // Pending File Upload
-  const [logoFile, setLogoFile] = React.useState<{ base64: string; name: string } | null>(null);
+  // Pending File Upload (menggunakan File murni)
+  const [logoFile, setLogoFile] = React.useState<File | null>(null);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
 
   const {
@@ -46,8 +46,13 @@ export default function TampilanClient({ initialSettings }: TampilanClientProps)
 
     // 1. Jika ada file logo kustom untuk navbar settings, unggah sekarang
     if (logoFile) {
-      const url = await uploadMedia('logo-navbar-settings', logoFile.base64, logoFile.name);
-      finalData.settings_logo_url = url;
+      const formData = new FormData();
+      formData.append('file', logoFile);
+      formData.append('bucket', 'logo-navbar-settings');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah logo navbar settings.');
+      finalData.settings_logo_url = data.url;
     }
 
     // 2. Simpan ke database
@@ -79,24 +84,16 @@ export default function TampilanClient({ initialSettings }: TampilanClientProps)
     resetDraft();
   };
 
-  // Convert file to base64
+  // Menangani perubahan file
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setLogoFile({
-        base64: reader.result as string,
-        name: file.name
-      });
-    };
-    reader.readAsDataURL(file);
+    setLogoFile(file);
   };
 
   // Helper preview
   const getLogoPreview = () => {
-    if (logoFile) return logoFile.base64;
+    if (logoFile) return URL.createObjectURL(logoFile);
     return settings.settings_logo_url || '';
   };
 
@@ -242,6 +239,68 @@ export default function TampilanClient({ initialSettings }: TampilanClientProps)
               <p className="text-[10px] text-slate-500">
                 *Di dalam halaman settings, judul tab browser otomatis diatur menjadi: <code className="px-1.5 py-0.5 rounded bg-black/40 text-blue-400 font-mono text-[9px]">{settings.og_title || 'Nama'} | Pengaturan</code>
               </p>
+            </div>
+
+            {/* Pengaturan Seleksi Teks (Highlight) */}
+            <div className="space-y-3 pt-4 border-t border-white/5">
+              <h4 className="text-xs font-semibold text-slate-300">Warna Seleksi Teks (Highlight)</h4>
+              <p className="text-[10px] text-slate-500">
+                Warna yang muncul ketika pengunjung memilih/mem-blok teks di halaman utama.
+              </p>
+              
+              <div className="grid grid-cols-2 gap-4">
+                {/* Latar Belakang Seleksi */}
+                <div className="space-y-1.5">
+                  <label className="block text-[9px] font-mono uppercase tracking-wider text-slate-400">
+                    LATAR SELEKSI (BG)
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={settings.selection_bg_color || '#3b82f6'}
+                      onChange={(e) => updateData(prev => ({ ...prev, selection_bg_color: e.target.value }))}
+                      className="w-8 h-8 border border-white/10 bg-transparent rounded-lg cursor-pointer shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={settings.selection_bg_color || '#3b82f6'}
+                      onChange={(e) => updateData(prev => ({ ...prev, selection_bg_color: e.target.value }))}
+                      className="w-full px-2 h-8 rounded-lg border border-white/10 bg-neutral-950 text-white font-mono text-[10px] focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Warna Teks Seleksi */}
+                <div className="space-y-1.5">
+                  <label className="block text-[9px] font-mono uppercase tracking-wider text-slate-400">
+                    WARNA TEKS (FG)
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      value={settings.selection_text_color || '#ffffff'}
+                      onChange={(e) => updateData(prev => ({ ...prev, selection_text_color: e.target.value }))}
+                      className="w-8 h-8 border border-white/10 bg-transparent rounded-lg cursor-pointer shrink-0"
+                    />
+                    <input
+                      type="text"
+                      value={settings.selection_text_color || '#ffffff'}
+                      onChange={(e) => updateData(prev => ({ ...prev, selection_text_color: e.target.value }))}
+                      className="w-full px-2 h-8 rounded-lg border border-white/10 bg-neutral-950 text-white font-mono text-[10px] focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Teks Peringatan Jika Fitur Seleksi Dimatikan */}
+              {settings.disable_text_select && (
+                <p className="text-[10px] text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2 flex items-start gap-1">
+                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    Fitur seleksi teks dinonaktifkan di <strong>Keamanan</strong>. Pengaturan warna ini tidak akan terlihat aktif di halaman utama.
+                  </span>
+                </p>
+              )}
             </div>
           </div>
         </div>

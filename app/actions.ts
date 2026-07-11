@@ -9,7 +9,6 @@ import {
   addSocialButton,
   updateSocialButton,
   deleteSocialButton,
-  uploadFileToStorage,
   deleteFileFromStorage,
   SiteSettings,
   SocialButton,
@@ -145,30 +144,6 @@ export async function reorderButtons(buttons: { id: string; display_order: numbe
 
   revalidatePath('/');
   return true;
-}
-
-// --- MEDIA ACTIONS (UPLOAD & DELETE) ---
-
-export async function uploadMedia(bucketName: string, fileBase64: string, originalName: string, customId?: string) {
-  const authed = await isAuthenticated();
-  if (!authed) {
-    throw new Error('Akses ditolak. Anda tidak terautentikasi.');
-  }
-
-  const url = await uploadFileToStorage(bucketName, fileBase64, originalName, customId);
-  revalidatePath('/');
-  return url;
-}
-
-export async function deleteMedia(bucketName: string, fileUrl: string) {
-  const authed = await isAuthenticated();
-  if (!authed) {
-    throw new Error('Akses ditolak. Anda tidak terautentikasi.');
-  }
-
-  const success = await deleteFileFromStorage(bucketName, fileUrl);
-  revalidatePath('/');
-  return success;
 }
 
 export async function getConfigStatus() {

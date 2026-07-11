@@ -40,6 +40,8 @@ export interface SiteSettings {
   disable_text_select?: boolean;
   disable_pull_refresh?: boolean;
   disable_link_preview?: boolean;
+  selection_bg_color?: string;
+  selection_text_color?: string;
 }
 
 export interface SocialButton {
@@ -154,6 +156,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   disable_text_select: false,
   disable_pull_refresh: false,
   disable_link_preview: false,
+  selection_bg_color: '#3b82f6',
+  selection_text_color: '#ffffff',
 };
 
 const DEFAULT_BUTTONS: SocialButton[] = [
@@ -501,34 +505,29 @@ const getMimeType = (ext: string): string => {
   return mimeTypes[ext.toLowerCase()] || 'application/octet-stream';
 };
 
-// Fungsi mengunggah file ke storage (lokal atau Supabase)
+// Fungsi mengunggah file ke storage (hanya menggunakan Supabase dengan service_role key)
 export const uploadFileToStorage = async (
   bucketName: string,
-  fileBase64: string, // format data:image/png;base64,xxxx atau biner terenkripsi
+  fileData: string | Buffer,
   originalName: string,
   customId?: string
 ): Promise<string> => {
-  ensureLocalDirs();
-
-  // Bersihkan data URL base64 jika ada
-  const matches = fileBase64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
   let buffer: Buffer;
   let ext = getFileExtension(originalName);
 
-  if (matches && matches.length === 3) {
-    buffer = Buffer.from(matches[2], 'base64');
+  if (Buffer.isBuffer(fileData)) {
+    buffer = fileData;
   } else {
-    // Jika dikirim plain base64 tanpa prefix
-    buffer = Buffer.from(fileBase64, 'base64');
+    // Bersihkan data URL base64 jika ada
+    const matches = fileData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (matches && matches.length === 3) {
+      buffer = Buffer.from(matches[2], 'base64');
+    } else {
+      buffer = Buffer.from(fileData, 'base64');
+    }
   }
 
   // Tentukan nama file yang diunggah sesuai aturan spesifik dari bucket
-  // Bucket "foto-profil" disimpan dengan nama "foto-profil.{ext}"
-  // Bucket "favicon" disimpan dengan nama "favicon.{ext}"
-  // Bucket "background" disimpan dengan nama "background.{ext}"
-  // Bucket "backsound" disimpan dengan nama "backsound.{ext}"
-  // Bucket "og-image" disimpan dengan nama "og-image.{ext}"
-  // Bucket "logo-medsos" disimpan dengan nama "logo-medsos-{id}.{ext}"
   let fileName = '';
   if (bucketName === 'foto-profil') {
     fileName = `foto-profil${ext}`;
@@ -549,109 +548,63 @@ export const uploadFileToStorage = async (
     fileName = `${bucketName}-${Date.now()}${ext}`;
   }
 
-  let supabaseUploadError: any = null;
-
-  if (isSupabaseConfigured()) {
-    try {
-      const supabase = getSupabaseAdmin();
-
-      // Coba buat bucket jika belum ada di Supabase
-      try {
-        const { data: buckets } = await supabase.storage.listBuckets();
-        const exists = buckets?.some(b => b.name === bucketName);
-        if (!exists) {
-          await supabase.storage.createBucket(bucketName, { public: true });
-        }
-      } catch (bucketErr) {
-        console.warn(`Gagal memeriksa/membuat bucket "${bucketName}":`, bucketErr);
-      }
-      
-      // Hapus file lama di bucket ini jika ada, agar tidak menumpuk
-      // Khusus untuk bucket non-logo-medsos yang filenya tunggal, atau jika kita tahu URL lamanya.
-      try {
-        const { data: list } = await supabase.storage.from(bucketName).list();
-        if (list && list.length > 0) {
-          // Jika ini bukan logo-medsos atau nama file sama, hapus file dengan nama persis atau semua file di bucket tunggal
-          if (bucketName !== 'logo-medsos') {
-            const filesToRemove = list.map(f => f.name);
-            await supabase.storage.from(bucketName).remove(filesToRemove);
-          } else if (customId) {
-            // Untuk logo-medsos, hapus logo dengan ID tombol yang sama jika ada sebelumnya
-            const targetPrefix = `logo-medsos-${customId}`;
-            const filesToRemove = list.filter(f => f.name.startsWith(targetPrefix)).map(f => f.name);
-            if (filesToRemove.length > 0) {
-              await supabase.storage.from(bucketName).remove(filesToRemove);
-            }
-          }
-        }
-      } catch (err) {
-        console.warn('Error clearing old storage files:', err);
-      }
-
-      const contentType = (matches && matches[1]) ? matches[1] : getMimeType(ext);
-
-      // Unggah file baru ke Supabase
-      const { data, error } = await supabase.storage
-        .from(bucketName)
-        .upload(fileName, buffer, {
-          contentType: contentType,
-          upsert: true,
-        });
-
-      if (error) throw error;
-
-      // Dapatkan URL publik file
-      const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
-      return publicUrlData.publicUrl;
-    } catch (err: any) {
-      console.error(`Gagal unggah file ke Supabase Storage "${bucketName}":`, err);
-      supabaseUploadError = err;
-      // Lanjutkan ke fallback lokal jika Supabase gagal
-    }
+  if (!isSupabaseConfigured()) {
+    throw new Error(
+      `Supabase belum dikonfigurasi. Unggahan file tidak dapat disimpan karena sistem tidak lagi menggunakan penyimpanan lokal disk. Silakan masukkan variabel lingkungan SUPABASE_URL dan SUPABASE_ANON_KEY.`
+    );
   }
 
-  // --- FALLBACK LOKAL ---
-  // Hapus file lama di folder lokal sesuai skema yang sama
+  const supabase = getSupabaseAdmin();
+
+  // Coba buat bucket jika belum ada di Supabase
   try {
-    if (bucketName !== 'logo-medsos') {
-      const files = fs.readdirSync(UPLOADS_DIR);
-      const oldFiles = files.filter(f => f.startsWith(bucketName));
-      for (const file of oldFiles) {
-        fs.unlinkSync(path.join(UPLOADS_DIR, file));
-      }
-    } else if (customId) {
-      const files = fs.readdirSync(UPLOADS_DIR);
-      const targetPrefix = `logo-medsos-${customId}`;
-      const oldFiles = files.filter(f => f.startsWith(targetPrefix));
-      for (const file of oldFiles) {
-        fs.unlinkSync(path.join(UPLOADS_DIR, file));
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const exists = buckets?.some(b => b.name === bucketName);
+    if (!exists) {
+      await supabase.storage.createBucket(bucketName, { public: true });
+    }
+  } catch (bucketErr) {
+    console.warn(`Gagal memeriksa/membuat bucket "${bucketName}":`, bucketErr);
+  }
+
+  // Hapus file lama di bucket ini jika ada, agar tidak menumpuk
+  try {
+    const { data: list } = await supabase.storage.from(bucketName).list();
+    if (list && list.length > 0) {
+      if (bucketName !== 'logo-medsos') {
+        const filesToRemove = list.map(f => f.name);
+        await supabase.storage.from(bucketName).remove(filesToRemove);
+      } else if (customId) {
+        const targetPrefix = `logo-medsos-${customId}`;
+        const filesToRemove = list.filter(f => f.name.startsWith(targetPrefix)).map(f => f.name);
+        if (filesToRemove.length > 0) {
+          await supabase.storage.from(bucketName).remove(filesToRemove);
+        }
       }
     }
   } catch (err) {
-    console.warn('Error clearing old local files:', err);
+    console.warn('Error clearing old storage files:', err);
   }
 
-  // Tulis file lokal
-  try {
-    const localFilePath = path.join(UPLOADS_DIR, fileName);
-    fs.writeFileSync(localFilePath, buffer);
-    // Kembalikan URL publik lokal yang bisa diakses
-    return `/uploads/${fileName}`;
-  } catch (err) {
-    console.error('Gagal menulis file lokal:', err);
-    // Jika gagal menulis ke disk lokal (karena lingkungan read-only di server produksi)
-    // dan sebelumnya Supabase gagal, kita harus melempar error deskriptif yang jelas ke klien.
-    if (isSupabaseConfigured()) {
-      const detailMsg = supabaseUploadError?.message || 'Access Denied.';
-      throw new Error(
-        `Gagal mengunggah file ke Supabase Storage (bucket: "${bucketName}"). ` +
-        `Detail: "${detailMsg}". Pastikan Anda telah mengonfigurasi variabel lingkungan SUPABASE_SERVICE_ROLE_KEY ` +
-        `di Settings Dashboard atau file .env Anda agar unggahan file melewati (bypass) kebijakan keamanan RLS.`
-      );
-    } else {
-      throw new Error(
-        `Gagal menyimpan file secara lokal karena direktori penyimpanan bersifat Read-Only (hanya-baca) dan Supabase belum terkonfigurasi.`
-      );
-    }
+  const contentType = getMimeType(ext);
+
+  // Unggah file baru ke Supabase
+  const { data, error } = await supabase.storage
+    .from(bucketName)
+    .upload(fileName, buffer, {
+      contentType: contentType,
+      upsert: true,
+    });
+
+  if (error) {
+    throw new Error(
+      `Gagal mengunggah file ke Supabase Storage (bucket: "${bucketName}"). ` +
+      `Detail: "${error.message}". Pastikan Anda telah mengonfigurasi variabel lingkungan SUPABASE_SERVICE_ROLE_KEY ` +
+      `agar unggahan file dapat melewati (bypass) kebijakan keamanan RLS secara tuntas.`
+    );
   }
+
+  // Dapatkan URL publik file
+  const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+  return publicUrlData.publicUrl;
 };

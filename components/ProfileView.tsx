@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ArrowRight, ChevronRight, Sparkles, Smartphone } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { SiteSettings, SocialButton } from '@/lib/db';
@@ -17,6 +17,14 @@ interface ProfileViewProps {
 
 export default function ProfileView({ settings: initialSettings, buttons = [] }: ProfileViewProps) {
   const isMobile = useIsMobile();
+  const [hasEntered, setHasEntered] = React.useState(false);
+
+  const handleEnter = () => {
+    setHasEntered(true);
+    // Kirim event kustom untuk memutar backsound
+    const event = new CustomEvent('play-backsound');
+    window.dispatchEvent(event);
+  };
 
   const settings = React.useMemo(() => {
     return initialSettings || {
@@ -312,6 +320,16 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
             overscroll-behavior: auto !important;
           }
         `}
+        ${!settings.disable_text_select ? `
+          ::selection {
+            background-color: ${settings.selection_bg_color || '#3b82f6'} !important;
+            color: ${settings.selection_text_color || '#ffffff'} !important;
+          }
+          ::-moz-selection {
+            background-color: ${settings.selection_bg_color || '#3b82f6'} !important;
+            color: ${settings.selection_text_color || '#ffffff'} !important;
+          }
+        ` : ''}
       `}} />
 
       {/* Latar Belakang Dinamis */}
@@ -325,7 +343,12 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
       />
 
       {/* Kontainer Profil Utama - Ditambahkan scrollable-content agar isi bento tetap bisa di-scroll internal jika HP kecil */}
-      <div className="w-full max-w-md my-auto space-y-8 py-6 z-20 overflow-y-auto max-h-[82vh] scrollable-content no-scrollbar pr-0.5">
+      <motion.div 
+        animate={{ opacity: hasEntered ? 1 : 0, scale: hasEntered ? 1 : 0.95 }}
+        initial={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-md my-auto space-y-8 py-6 z-20 overflow-y-auto max-h-[82vh] scrollable-content no-scrollbar pr-0.5"
+      >
         
         {/* Foto & Info Header */}
         <div className="flex flex-col items-center text-center space-y-5">
@@ -452,7 +475,7 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
           </div>
         )}
 
-      </div>
+      </motion.div>
 
       {/* Teks Footer Kecil Opasitas Rendah */}
       <motion.footer 
@@ -463,6 +486,51 @@ export default function ProfileView({ settings: initialSettings, buttons = [] }:
       >
         {settings.footer_text || '© 2026 Media Sosial ReyLan.'}
       </motion.footer>
+
+      <AnimatePresence>
+        {!hasEntered && (
+          <motion.div
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.6, ease: 'easeInOut' }}
+            onClick={handleEnter}
+            className="fixed inset-0 z-[99999] flex flex-col items-center justify-center bg-black/75 backdrop-blur-3xl cursor-pointer select-none text-center p-6"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 100, damping: 15, delay: 0.1 }}
+              className="space-y-4 max-w-xs"
+            >
+              {/* Foto Profil mini */}
+              {settings.profile_photo_url && (
+                <div className="w-20 h-20 mx-auto rounded-full p-1 bg-white/10 border border-white/20 overflow-hidden mb-2 shadow-lg">
+                  <img
+                    src={settings.profile_photo_url}
+                    alt={settings.account_name}
+                    className="w-full h-full rounded-full object-cover animate-pulse"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+              <h2 className="text-xl font-bold tracking-tight text-white font-display">
+                {settings.account_name}
+              </h2>
+              {settings.bio && (
+                <p className="text-xs text-slate-400 line-clamp-2 max-w-[240px] mx-auto">
+                  {settings.bio}
+                </p>
+              )}
+              <div className="pt-4 flex flex-col items-center gap-1">
+                <span className="text-[10px] text-blue-400 tracking-[0.2em] font-mono uppercase animate-pulse">
+                  KETUK UNTUK MASUK
+                </span>
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping mt-1"></div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useSettingsDraft } from '@/hooks/useSettingsDraft';
-import { updateSettings, uploadMedia } from '@/app/actions';
+import { updateSettings } from '@/app/actions';
 import { SiteSettings } from '@/lib/db';
 import { 
   Upload, 
@@ -20,8 +20,8 @@ interface OptimasiSeoClientProps {
 }
 
 export default function OptimasiSeoClient({ initialSettings }: OptimasiSeoClientProps) {
-  // Pending File Upload
-  const [ogImageFile, setOgImageFile] = React.useState<{ base64: string; name: string } | null>(null);
+  // Pending File Upload (menggunakan File murni)
+  const [ogImageFile, setOgImageFile] = React.useState<File | null>(null);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
 
   const {
@@ -41,8 +41,13 @@ export default function OptimasiSeoClient({ initialSettings }: OptimasiSeoClient
 
     // 1. Upload og-image kustom jika ada
     if (ogImageFile) {
-      const url = await uploadMedia('og-image', ogImageFile.base64, ogImageFile.name);
-      finalData.og_image_url = url;
+      const formData = new FormData();
+      formData.append('file', ogImageFile);
+      formData.append('bucket', 'og-image');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah gambar Open Graph.');
+      finalData.og_image_url = data.url;
     }
 
     // 2. Simpan ke database
@@ -71,24 +76,16 @@ export default function OptimasiSeoClient({ initialSettings }: OptimasiSeoClient
     resetDraft();
   };
 
-  // Convert file to base64
+  // Menangani perubahan file
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setOgImageFile({
-        base64: reader.result as string,
-        name: file.name
-      });
-    };
-    reader.readAsDataURL(file);
+    setOgImageFile(file);
   };
 
   // Helper preview
   const getOgImagePreview = () => {
-    if (ogImageFile) return ogImageFile.base64;
+    if (ogImageFile) return URL.createObjectURL(ogImageFile);
     return settings.og_image_url || '';
   };
 

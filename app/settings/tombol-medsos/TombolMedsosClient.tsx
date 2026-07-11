@@ -2,14 +2,12 @@
 
 import * as React from 'react';
 import { useSettingsDraft } from '@/hooks/useSettingsDraft';
-import { addBtn, updateBtn, deleteBtn, reorderButtons, uploadMedia } from '@/app/actions';
+import { addBtn, updateBtn, deleteBtn, reorderButtons } from '@/app/actions';
 import { SocialButton } from '@/lib/db';
 import { 
   Plus, 
   Trash2, 
   Edit2, 
-  ArrowUp, 
-  ArrowDown, 
   Upload, 
   Link as LinkIcon, 
   RotateCcw, 
@@ -20,8 +18,117 @@ import {
   Sliders,
   CheckCircle,
   Eye,
-  EyeOff
+  EyeOff,
+  GripVertical
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+interface SortableButtonRowProps {
+  btn: SocialButton;
+  index: number;
+  onEdit: (btn: SocialButton) => void;
+  onDelete: (id: string, name: string) => void;
+}
+
+function SortableButtonRow({ btn, index, onEdit, onDelete }: SortableButtonRowProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: btn.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : (btn.is_active ? 1 : 0.5),
+    zIndex: isDragging ? 50 : 'auto',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center justify-between p-4 rounded-xl border transition-all duration-300 bg-slate-900/40 backdrop-blur-sm
+        ${btn.is_active ? 'border-white/10' : 'border-white/5'}
+        ${isDragging ? 'border-settings-accent/50 shadow-lg shadow-settings-accent/10' : ''}
+      `}
+    >
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        {/* Drag Handle */}
+        <div 
+          {...attributes} 
+          {...listeners} 
+          className="cursor-grab active:cursor-grabbing p-2 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white shrink-0"
+          title="Geser untuk mengurutkan"
+        >
+          <GripVertical className="w-3.5 h-3.5" />
+        </div>
+
+        <img
+          src={btn.logo_url}
+          alt={btn.platform_name}
+          className="w-10 h-10 rounded-xl object-cover bg-slate-950 border border-white/5 shrink-0"
+          referrerPolicy="no-referrer"
+        />
+        <div className="min-w-0 flex-1">
+          <h4 className="font-semibold text-xs text-white flex items-center gap-1.5">
+            {btn.platform_name}
+            {btn.is_active ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            ) : (
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+            )}
+          </h4>
+          <p className="text-[10px] text-slate-500 font-mono truncate">
+            {btn.target_url}
+          </p>
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 ml-3 shrink-0">
+        {/* Edit */}
+        <button
+          type="button"
+          onClick={() => onEdit(btn)}
+          className="p-1.5 rounded-lg border border-white/5 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+          title="Edit Tombol"
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Hapus */}
+        <button
+          type="button"
+          onClick={() => onDelete(btn.id, btn.platform_name)}
+          className="p-1.5 rounded-lg border border-white/5 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+          title="Hapus Tombol"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 interface TombolMedsosClientProps {
   initialButtons: SocialButton[];
@@ -38,9 +145,35 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
   const [isActive, setIsActive] = React.useState(true);
   const [logoMode, setLogoMode] = React.useState<'url' | 'upload'>('url');
   const [logoUrl, setLogoUrl] = React.useState('');
-  const [logoFile, setLogoFile] = React.useState<{ base64: string; name: string } | null>(null);
+  const [logoFile, setLogoFile] = React.useState<File | null>(null);
 
   const [saveSuccess, setSaveSuccess] = React.useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = React.useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 50,
+        tolerance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      updateData((prev) => {
+        const oldIndex = prev.findIndex((item) => item.id === active.id);
+        const newIndex = prev.findIndex((item) => item.id === over.id);
+
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    }
+  };
 
   // Hook draft
   const {
@@ -68,14 +201,6 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
     for (let i = 0; i < currentButtons.length; i++) {
       const btn = { ...currentButtons[i] };
       const displayOrder = i + 1; // Sinkronkan display order dari atas ke bawah
-
-      // Jika ada file gambar lokal yang belum diunggah ke Supabase
-      if (btn.logo_url.startsWith('data:image')) {
-        // Cari nama file yang kita simpan, jika tidak ada pakai default
-        const fileName = (btn as any)._tempFileName || `logo-medsos-${btn.id}.png`;
-        const uploadedUrl = await uploadMedia('logo-medsos', btn.logo_url, fileName, btn.id);
-        btn.logo_url = uploadedUrl;
-      }
 
       // Cek apakah tombol ini baru atau lama
       const isNew = !initialButtons.some(init => init.id === btn.id);
@@ -128,19 +253,11 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
     }
   }, [isDirty]);
 
-  // Handle Upload File Logo Medsos ke Base64 lokal
+  // Handle Upload File Logo Medsos ke State File murni
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setLogoFile({
-        base64: reader.result as string,
-        name: file.name
-      });
-    };
-    reader.readAsDataURL(file);
+    setLogoFile(file);
   };
 
   // Tutup dan reset formulir editor
@@ -173,17 +290,39 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
     setIsFormOpen(true);
   };
 
-  // Simpan tombol ke draf lokal (belum ke Supabase)
-  const handleSaveToDraft = (e: React.FormEvent) => {
+  // Simpan tombol ke draf lokal (mengunggah biner langsung ke Supabase Storage via API route)
+  const handleSaveToDraft = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!platformName || !targetUrl) return;
 
     let finalLogo = logoUrl;
-    let tempFileName = '';
+    const buttonId = editingId || `medbtn-${Date.now()}`;
 
-    if (logoMode === 'upload' && logoFile) {
-      finalLogo = logoFile.base64;
-      tempFileName = logoFile.name;
+    if (logoMode === 'upload') {
+      if (logoFile) {
+        setIsUploadingLogo(true);
+        try {
+          const formData = new FormData();
+          formData.append('file', logoFile);
+          formData.append('bucket', 'logo-medsos');
+          formData.append('customId', buttonId);
+
+          const res = await fetch('/api/upload', { method: 'POST', body: formData });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            throw new Error(data.error || 'Gagal mengunggah logo medsos.');
+          }
+          finalLogo = data.url;
+        } catch (uploadErr: any) {
+          alert(`Error saat mengunggah logo: ${uploadErr.message}`);
+          setIsUploadingLogo(false);
+          return;
+        }
+        setIsUploadingLogo(false);
+      } else if (!editingId) {
+        alert('Harap pilih file logo terlebih dahulu.');
+        return;
+      }
     }
 
     if (!finalLogo && logoMode === 'url') {
@@ -195,34 +334,26 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
       // Perbarui tombol yang ada di draf
       updateData(prev => prev.map(b => {
         if (b.id === editingId) {
-          const updated = {
+          return {
             ...b,
             platform_name: platformName,
             logo_url: finalLogo || b.logo_url,
             target_url: targetUrl,
             is_active: isActive,
           };
-          if (tempFileName) {
-            (updated as any)._tempFileName = tempFileName;
-          }
-          return updated;
         }
         return b;
       }));
     } else {
       // Tambah tombol baru ke draf
-      const newId = `temp-${Date.now()}`;
       const newBtn: SocialButton = {
-        id: newId,
+        id: buttonId,
         platform_name: platformName,
         logo_url: finalLogo || 'https://picsum.photos/seed/default/100/100',
         target_url: targetUrl,
         display_order: buttons.length + 1,
         is_active: isActive,
       };
-      if (tempFileName) {
-        (newBtn as any)._tempFileName = tempFileName;
-      }
       updateData(prev => [...prev, newBtn]);
     }
 
@@ -235,29 +366,7 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
     updateData(prev => prev.filter(b => b.id !== id));
   };
 
-  // Geser Urutan Tombol ke Atas
-  const handleMoveUp = (index: number) => {
-    if (index === 0) return;
-    updateData(prev => {
-      const next = [...prev];
-      const temp = next[index];
-      next[index] = next[index - 1];
-      next[index - 1] = temp;
-      return next;
-    });
-  };
 
-  // Geser Urutan Tombol ke Bawah
-  const handleMoveDown = (index: number) => {
-    if (index === buttons.length - 1) return;
-    updateData(prev => {
-      const next = [...prev];
-      const temp = next[index];
-      next[index] = next[index + 1];
-      next[index + 1] = temp;
-      return next;
-    });
-  };
 
   return (
     <div className="space-y-6 animate-fade-in" style={{ animationDuration: '0.3s' }}>
@@ -371,73 +480,28 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
               <p>Belum ada tombol medsos. Silakan tambahkan tombol baru!</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {buttons.map((btn, index) => (
-                <div
-                  key={btn.id}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-all duration-300 bg-slate-900/40 backdrop-blur-sm
-                    ${btn.is_active ? 'border-white/10' : 'border-white/5 opacity-50'}
-                  `}
-                >
-                  <div className="flex items-center gap-3">
-                    <img
-                      src={btn.logo_url}
-                      alt={btn.platform_name}
-                      className="w-10 h-10 rounded-xl object-cover bg-slate-950 border border-white/5 shrink-0"
-                      referrerPolicy="no-referrer"
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={buttons.map(b => b.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-2">
+                  {buttons.map((btn, index) => (
+                    <SortableButtonRow
+                      key={btn.id}
+                      btn={btn}
+                      index={index}
+                      onEdit={openEditForm}
+                      onDelete={handleDeleteFromDraft}
                     />
-                    <div>
-                      <h4 className="font-semibold text-xs text-white flex items-center gap-1.5">
-                        {btn.platform_name}
-                        {btn.is_active ? (
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        ) : (
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                        )}
-                      </h4>
-                      <p className="text-[10px] text-slate-500 font-mono max-w-[150px] sm:max-w-xs truncate">
-                        {btn.target_url}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Actions (Reorder, Edit, Delete) */}
-                  <div className="flex items-center gap-1">
-                    {/* Urutan */}
-                    <button
-                      onClick={() => handleMoveUp(index)}
-                      disabled={index === 0}
-                      className="p-1.5 rounded-lg border border-white/5 text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-20 disabled:pointer-events-none"
-                    >
-                      <ArrowUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleMoveDown(index)}
-                      disabled={index === buttons.length - 1}
-                      className="p-1.5 rounded-lg border border-white/5 text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-20 disabled:pointer-events-none"
-                    >
-                      <ArrowDown className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Edit */}
-                    <button
-                      onClick={() => openEditForm(btn)}
-                      className="p-1.5 rounded-lg border border-white/5 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Hapus */}
-                    <button
-                      onClick={() => handleDeleteFromDraft(btn.id, btn.platform_name)}
-                      className="p-1.5 rounded-lg border border-white/5 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
           )}
         </div>
 
@@ -575,9 +639,10 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 h-9 rounded-xl bg-settings-accent hover:opacity-90 text-white text-xs font-bold transition-all duration-200"
+                  disabled={isUploadingLogo}
+                  className="flex-1 h-9 rounded-xl bg-settings-accent hover:opacity-90 disabled:opacity-50 text-white text-xs font-bold transition-all duration-200"
                 >
-                  OK (Masukkan Draf)
+                  {isUploadingLogo ? 'Mengunggah...' : 'OK (Masukkan Draf)'}
                 </button>
               </div>
             </form>

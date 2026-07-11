@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Volume2, VolumeX, Music } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
 
 interface AudioPlayerProps {
   url: string | null;
@@ -62,6 +62,27 @@ export default function AudioPlayer({ url, volume, enabled }: AudioPlayerProps) 
     }
   }, [volume]);
 
+  // Dengarkan event kustom 'play-backsound' dari layar Klik Untuk Masuk
+  React.useEffect(() => {
+    const handlePlayEvent = () => {
+      if (audioRef.current && !hasError) {
+        setShowTooltip(false);
+        audioRef.current.play()
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch((err) => {
+            console.error('Gagal memutar audio dari event kustom:', err);
+          });
+      }
+    };
+
+    window.addEventListener('play-backsound', handlePlayEvent);
+    return () => {
+      window.removeEventListener('play-backsound', handlePlayEvent);
+    };
+  }, [hasError]);
+
   const togglePlay = () => {
     if (!audioRef.current || hasError) return;
 
@@ -81,10 +102,10 @@ export default function AudioPlayer({ url, volume, enabled }: AudioPlayerProps) 
     }
   };
 
-  if (!url || !enabled || hasError) return null;
+  if (!url || !enabled) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex items-center gap-3">
+    <div className="fixed bottom-6 right-6 z-[9999] flex items-center gap-3">
       {/* Tooltip Petunjuk Interaksi */}
       {showTooltip && (
         <div className="bg-black/80 backdrop-blur-md border border-white/10 text-[11px] font-sans text-blue-200 px-3 py-1.5 rounded-xl shadow-xl animate-bounce whitespace-nowrap select-none pointer-events-none">
@@ -108,8 +129,8 @@ export default function AudioPlayer({ url, volume, enabled }: AudioPlayerProps) 
 
         <div className="relative z-10 flex items-center justify-center">
           {isPlaying ? (
-            <div className="flex items-center gap-1.5">
-              <Volume2 className="w-5 h-5 animate-pulse" />
+            <div className="flex items-center gap-1">
+              <Pause className="w-5 h-5 animate-pulse" />
               {/* Visualizer Bar Kecil */}
               <div className="flex items-end gap-[1.5px] h-3.5">
                 <span className="w-[1.5px] bg-blue-300 rounded-full animate-[bounce_1s_infinite_100ms] h-2"></span>
@@ -119,7 +140,7 @@ export default function AudioPlayer({ url, volume, enabled }: AudioPlayerProps) 
             </div>
           ) : (
             <div className="flex items-center justify-center">
-              <VolumeX className="w-5 h-5 opacity-60 group-hover:scale-110 transition-transform duration-300" />
+              <Play className="w-5 h-5 opacity-80 group-hover:scale-110 transition-transform duration-300" />
             </div>
           )}
         </div>

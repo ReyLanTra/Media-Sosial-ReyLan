@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useSettingsDraft } from '@/hooks/useSettingsDraft';
-import { updateSettings, uploadMedia } from '@/app/actions';
+import { updateSettings } from '@/app/actions';
 import { SiteSettings } from '@/lib/db';
 import { 
   Upload, 
@@ -22,9 +22,9 @@ interface ProfilKontenClientProps {
 }
 
 export default function ProfilKontenClient({ initialSettings }: ProfilKontenClientProps) {
-  // Simpan file base64 yang diunggah sementara di sisi klien
-  const [profilePhotoFile, setProfilePhotoFile] = React.useState<{ base64: string; name: string } | null>(null);
-  const [faviconFile, setFaviconFile] = React.useState<{ base64: string; name: string } | null>(null);
+  // Simpan file asli yang diunggah sementara di sisi klien
+  const [profilePhotoFile, setProfilePhotoFile] = React.useState<File | null>(null);
+  const [faviconFile, setFaviconFile] = React.useState<File | null>(null);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
 
   // Hook untuk draft, undo, redo, batal, dsb.
@@ -45,14 +45,24 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
 
     // 1. Jika ada unggahan foto profil kustom yang tertunda, unggah sekarang
     if (profilePhotoFile) {
-      const url = await uploadMedia('foto-profil', profilePhotoFile.base64, profilePhotoFile.name);
-      finalData.profile_photo_url = url;
+      const formData = new FormData();
+      formData.append('file', profilePhotoFile);
+      formData.append('bucket', 'foto-profil');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah foto profil.');
+      finalData.profile_photo_url = data.url;
     }
 
     // 2. Jika ada unggahan favicon kustom yang tertunda, unggah sekarang
     if (faviconFile) {
-      const url = await uploadMedia('favicon', faviconFile.base64, faviconFile.name);
-      finalData.favicon_url = url;
+      const formData = new FormData();
+      formData.append('file', faviconFile);
+      formData.append('bucket', 'favicon');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah favicon.');
+      finalData.favicon_url = data.url;
     }
 
     // 3. Simpan seluruh konfigurasi ke database
@@ -84,7 +94,7 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
     resetDraft();
   };
 
-  // Konversi file ke base64
+  // Menangani perubahan file
   const handleFileChange = (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'profile_photo' | 'favicon'
@@ -92,26 +102,21 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result as string;
-      if (type === 'profile_photo') {
-        setProfilePhotoFile({ base64: base64String, name: file.name });
-      } else {
-        setFaviconFile({ base64: base64String, name: file.name });
-      }
-    };
-    reader.readAsDataURL(file);
+    if (type === 'profile_photo') {
+      setProfilePhotoFile(file);
+    } else {
+      setFaviconFile(file);
+    }
   };
 
   // Preview Image URL Helper
   const getProfilePreview = () => {
-    if (profilePhotoFile) return profilePhotoFile.base64;
+    if (profilePhotoFile) return URL.createObjectURL(profilePhotoFile);
     return settings.profile_photo_url || '';
   };
 
   const getFaviconPreview = () => {
-    if (faviconFile) return faviconFile.base64;
+    if (faviconFile) return URL.createObjectURL(faviconFile);
     return settings.favicon_url || '';
   };
 
