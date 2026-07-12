@@ -78,7 +78,7 @@ function SortableButtonRow({ btn, index, onEdit, onDelete }: SortableButtonRowPr
         <div 
           {...attributes} 
           {...listeners} 
-          className="cursor-grab active:cursor-grabbing p-2 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white shrink-0"
+          className="cursor-grab active:cursor-grabbing p-2 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white shrink-0 touch-none"
           title="Geser untuk mengurutkan"
         >
           <GripVertical className="w-3.5 h-3.5" />
@@ -152,22 +152,10 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
   const [isUploadingLogo, setIsUploadingLogo] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
 
-  // Scroll lock effect
-  React.useEffect(() => {
-    if (isDragging) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';
-    } else {
-      document.body.style.overflow = '';
-      document.body.style.touchAction = '';
-    }
-  }, [isDragging]);
-
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 50,
-        tolerance: 5,
+        distance: 8,
       },
     }),
     useSensor(KeyboardSensor, {

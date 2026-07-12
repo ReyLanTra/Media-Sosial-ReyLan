@@ -93,7 +93,7 @@ function SortableMusicItem({
       style={style}
       className={`flex items-center gap-3 p-3 rounded-xl border border-white/5 bg-black/20 ${isDragging ? 'shadow-xl shadow-black/50 border-settings-accent/50 opacity-80' : ''}`}
     >
-      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-slate-500 hover:text-slate-300 transition-colors">
+      <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-slate-500 hover:text-slate-300 transition-colors touch-none">
         <GripVertical className="w-4 h-4" />
       </div>
       <div className="flex-1 min-w-0 space-y-1">
@@ -157,7 +157,7 @@ function SortableBgItem({
       <div 
         {...attributes} 
         {...listeners} 
-        className="absolute inset-0 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/40 transition-opacity"
+        className="absolute inset-0 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/40 transition-opacity touch-none"
       >
         <GripVertical className="w-8 h-8 text-white/50" />
       </div>
@@ -221,20 +221,20 @@ export default function LatarMusikClient({
     };
   }, []);
 
-  const [saveSuccess, setSaveSuccess] = React.useState(false);
+  const [isSavingDraft, setIsSavingDraft] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
   const [dragTarget, setDragTarget] = React.useState<'mobile' | 'desktop' | 'music' | null>(null);
 
-  // Scroll lock effect
-  React.useEffect(() => {
-    if (isDragging) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.touchAction = 'none';
-    } else {
-      document.body.style.overflow = '';
-      document.body.style.touchAction = '';
-    }
-  }, [isDragging]);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const {
     data: settings,
@@ -359,6 +359,40 @@ export default function LatarMusikClient({
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
   });
+
+  const [saveSuccess, setSaveSuccess] = React.useState(false);
+
+  // --- DRAG & DROP LOGIC ---
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const { active } = event;
+    setIsDragging(true);
+    if (tracks.some(t => t.id === active.id)) setDragTarget('music');
+    else if (mobileBgImages.some(m => m.id === active.id)) setDragTarget('mobile');
+    else if (desktopBgImages.some(d => d.id === active.id)) setDragTarget('desktop');
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setIsDragging(false);
+    setDragTarget(null);
+
+    if (over && active.id !== over.id) {
+      if (dragTarget === 'music') {
+        const oldIdx = tracks.findIndex(t => t.id === active.id);
+        const newIdx = tracks.findIndex(t => t.id === over.id);
+        setTracks(arrayMove(tracks, oldIdx, newIdx));
+      } else if (dragTarget === 'mobile') {
+        const oldIdx = mobileBgImages.findIndex(m => m.id === active.id);
+        const newIdx = mobileBgImages.findIndex(m => m.id === over.id);
+        setMobileBgImages(arrayMove(mobileBgImages, oldIdx, newIdx));
+      } else if (dragTarget === 'desktop') {
+        const oldIdx = desktopBgImages.findIndex(d => d.id === active.id);
+        const newIdx = desktopBgImages.findIndex(d => d.id === over.id);
+        setDesktopBgImages(arrayMove(desktopBgImages, oldIdx, newIdx));
+      }
+    }
+  };
 
   const isListDirty = 
     deletedMobileIds.length > 0 || 
@@ -526,41 +560,6 @@ export default function LatarMusikClient({
   };
 
   // --- DRAG & DROP LOGIC ---
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    setIsDragging(true);
-    if (tracks.some(t => t.id === active.id)) setDragTarget('music');
-    else if (mobileBgImages.some(m => m.id === active.id)) setDragTarget('mobile');
-    else if (desktopBgImages.some(d => d.id === active.id)) setDragTarget('desktop');
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setIsDragging(false);
-    setDragTarget(null);
-
-    if (over && active.id !== over.id) {
-      if (dragTarget === 'music') {
-        const oldIdx = tracks.findIndex(t => t.id === active.id);
-        const newIdx = tracks.findIndex(t => t.id === over.id);
-        setTracks(arrayMove(tracks, oldIdx, newIdx));
-      } else if (dragTarget === 'mobile') {
-        const oldIdx = mobileBgImages.findIndex(m => m.id === active.id);
-        const newIdx = mobileBgImages.findIndex(m => m.id === over.id);
-        setMobileBgImages(arrayMove(mobileBgImages, oldIdx, newIdx));
-      } else if (dragTarget === 'desktop') {
-        const oldIdx = desktopBgImages.findIndex(d => d.id === active.id);
-        const newIdx = desktopBgImages.findIndex(d => d.id === over.id);
-        setDesktopBgImages(arrayMove(desktopBgImages, oldIdx, newIdx));
-      }
-    }
-  };
 
   return (
     <div className="space-y-6 animate-fade-in" style={{ animationDuration: '0.3s' }}>
