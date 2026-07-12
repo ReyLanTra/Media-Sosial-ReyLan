@@ -56,7 +56,10 @@ export default function TampilanClient({ initialSettings }: TampilanClientProps)
     }
 
     // 2. Simpan ke database
-    await updateSettings(finalData);
+    const saveResult = await updateSettings(finalData);
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || 'Gagal menyimpan pengaturan tampilan.');
+    }
 
     setLogoFile(null);
     setSaveSuccess(true);

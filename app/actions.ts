@@ -93,16 +93,19 @@ export async function getSettings() {
 }
 
 export async function updateSettings(data: Partial<SiteSettings>) {
-  const authed = await isAuthenticated();
-  if (!authed) {
-    throw new Error('Akses ditolak. Anda tidak terautentikasi.');
-  }
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) {
+      return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    }
 
-  // Jika admin mengunggah URL profil baru dan URL lama ada,
-  // kita bisa menghapusnya, namun kita serahkan ke handleUpload untuk efisiensi.
-  const updated = await updateSiteSettings(data);
-  revalidatePath('/');
-  return updated;
+    const updated = await updateSiteSettings(data);
+    revalidatePath('/');
+    return { success: true, data: updated };
+  } catch (err: any) {
+    console.error('Error in updateSettings action:', err);
+    return { success: false, error: err?.message || 'Gagal memperbarui pengaturan situs.' };
+  }
 }
 
 // --- SOCIAL BUTTON ACTIONS ---
@@ -175,39 +178,59 @@ export async function getBgImages(deviceType: 'mobile' | 'desktop') {
 }
 
 export async function addBgImage(data: Omit<BackgroundImage, 'id'>) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  const item = await addBackgroundImage(data);
-  revalidatePath('/');
-  return item;
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    const item = await addBackgroundImage(data);
+    revalidatePath('/');
+    return { success: true, data: item };
+  } catch (err: any) {
+    console.error('Error in addBgImage action:', err);
+    return { success: false, error: err?.message || 'Gagal menambahkan gambar latar.' };
+  }
 }
 
 export async function deleteBgImage(id: string, urlToDelete: string, deviceType: 'mobile' | 'desktop') {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  const bucket = deviceType === 'mobile' ? 'background' : 'background-desktop';
-  await deleteFileFromStorage(bucket, urlToDelete);
-  const success = await deleteBackgroundImage(id);
-  revalidatePath('/');
-  return success;
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    const bucket = deviceType === 'mobile' ? 'background' : 'background-desktop';
+    await deleteFileFromStorage(bucket, urlToDelete);
+    const success = await deleteBackgroundImage(id);
+    revalidatePath('/');
+    return { success: true, data: success };
+  } catch (err: any) {
+    console.error('Error in deleteBgImage action:', err);
+    return { success: false, error: err?.message || 'Gagal menghapus gambar latar.' };
+  }
 }
 
 export async function updateBgImage(id: string, data: Partial<BackgroundImage>) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  const item = await updateBackgroundImage(id, data);
-  revalidatePath('/');
-  return item;
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    const item = await updateBackgroundImage(id, data);
+    revalidatePath('/');
+    return { success: true, data: item };
+  } catch (err: any) {
+    console.error('Error in updateBgImage action:', err);
+    return { success: false, error: err?.message || 'Gagal memperbarui gambar latar.' };
+  }
 }
 
 export async function reorderBgImages(images: { id: string; display_order: number }[]) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  for (const item of images) {
-    await updateBackgroundImage(item.id, { display_order: item.display_order });
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    for (const item of images) {
+      await updateBackgroundImage(item.id, { display_order: item.display_order });
+    }
+    revalidatePath('/');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error in reorderBgImages action:', err);
+    return { success: false, error: err?.message || 'Gagal menyusun ulang urutan gambar latar.' };
   }
-  revalidatePath('/');
-  return true;
 }
 
 // --- MUSIC PLAYLIST ---
@@ -217,19 +240,29 @@ export async function getTracks() {
 }
 
 export async function addTrack(data: Omit<MusicTrack, 'id'>) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  const item = await addMusicTrack(data);
-  revalidatePath('/');
-  return item;
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    const item = await addMusicTrack(data);
+    revalidatePath('/');
+    return { success: true, data: item };
+  } catch (err: any) {
+    console.error('Error in addTrack action:', err);
+    return { success: false, error: err?.message || 'Gagal menambahkan lagu.' };
+  }
 }
 
 export async function updateTrack(id: string, data: Partial<MusicTrack>) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  const item = await updateMusicTrack(id, data);
-  revalidatePath('/');
-  return item;
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    const item = await updateMusicTrack(id, data);
+    revalidatePath('/');
+    return { success: true, data: item };
+  } catch (err: any) {
+    console.error('Error in updateTrack action:', err);
+    return { success: false, error: err?.message || 'Gagal memperbarui lagu.' };
+  }
 }
 
 export async function updateMusicTrackAction(id: string, data: Partial<MusicTrack>) {
@@ -237,22 +270,32 @@ export async function updateMusicTrackAction(id: string, data: Partial<MusicTrac
 }
 
 export async function deleteTrack(id: string, urlToDelete: string) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  await deleteFileFromStorage('backsound', urlToDelete);
-  const success = await deleteMusicTrack(id);
-  revalidatePath('/');
-  return success;
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    await deleteFileFromStorage('backsound', urlToDelete);
+    const success = await deleteMusicTrack(id);
+    revalidatePath('/');
+    return { success: true, data: success };
+  } catch (err: any) {
+    console.error('Error in deleteTrack action:', err);
+    return { success: false, error: err?.message || 'Gagal menghapus lagu.' };
+  }
 }
 
 export async function reorderTracks(tracks: { id: string; display_order: number }[]) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  for (const item of tracks) {
-    await updateMusicTrack(item.id, { display_order: item.display_order });
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    for (const item of tracks) {
+      await updateMusicTrack(item.id, { display_order: item.display_order });
+    }
+    revalidatePath('/');
+    return { success: true };
+  } catch (err: any) {
+    console.error('Error in reorderTracks action:', err);
+    return { success: false, error: err?.message || 'Gagal menyusun ulang urutan lagu.' };
   }
-  revalidatePath('/');
-  return true;
 }
 
 // --- ANNOUNCEMENTS ---

@@ -66,7 +66,10 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
     }
 
     // 3. Simpan seluruh konfigurasi ke database
-    await updateSettings(finalData);
+    const saveResult = await updateSettings(finalData);
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || 'Gagal menyimpan profil & konten.');
+    }
     
     // Reset file temporer setelah sukses menyimpan
     setProfilePhotoFile(null);

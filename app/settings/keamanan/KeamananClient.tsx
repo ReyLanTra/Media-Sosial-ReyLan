@@ -47,7 +47,7 @@ export default function KeamananClient({ initialSettings }: KeamananClientProps)
     save: saveDraft,
   } = useSettingsDraft<SiteSettings>(initialSettings, async (currentData) => {
     // Simpan semua konfigurasi toggle boolean ke database
-    await updateSettings({
+    const saveResult = await updateSettings({
       disable_zoom: currentData.disable_zoom,
       disable_scroll: currentData.disable_scroll,
       disable_image_save: currentData.disable_image_save,
@@ -57,6 +57,9 @@ export default function KeamananClient({ initialSettings }: KeamananClientProps)
       allow_desktop_access: currentData.allow_desktop_access,
       allow_mobile_access: currentData.allow_mobile_access,
     });
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || 'Gagal menyimpan konfigurasi keamanan.');
+    }
 
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);

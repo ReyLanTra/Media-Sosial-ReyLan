@@ -51,7 +51,10 @@ export default function OptimasiSeoClient({ initialSettings }: OptimasiSeoClient
     }
 
     // 2. Simpan ke database
-    await updateSettings(finalData);
+    const saveResult = await updateSettings(finalData);
+    if (!saveResult.success) {
+      throw new Error(saveResult.error || 'Gagal menyimpan pengaturan SEO.');
+    }
 
     setOgImageFile(null);
     setSaveSuccess(true);

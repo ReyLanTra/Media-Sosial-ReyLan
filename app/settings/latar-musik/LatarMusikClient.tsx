@@ -256,22 +256,30 @@ export default function LatarMusikClient({
       let finalMobileUrl = currentData.background_url;
       let finalMobileType = currentData.background_type;
       if (newAnimMobileFile) {
-        finalMobileUrl = await handleUpload(newAnimMobileFile, 'background', 'anim');
-        const ext = newAnimMobileFile.name.split('.').pop()?.toLowerCase();
-        finalMobileType = ext === 'mp4' ? 'video' : 'image';
+        try {
+          finalMobileUrl = await handleUpload(newAnimMobileFile, 'background', 'anim');
+          const ext = newAnimMobileFile.name.split('.').pop()?.toLowerCase();
+          finalMobileType = ext === 'mp4' ? 'video' : 'image';
+        } catch (uploadErr: any) {
+          throw new Error(`Gagal mengunggah file animasi mobile ke storage: ${uploadErr.message}`);
+        }
       }
 
       // 2. Proses Upload Animasi Desktop jika ada
       let finalDesktopUrl = currentData.desktop_background_url;
       let finalDesktopType = currentData.desktop_background_type;
       if (newAnimDesktopFile) {
-        finalDesktopUrl = await handleUpload(newAnimDesktopFile, 'background-desktop', 'anim');
-        const ext = newAnimDesktopFile.name.split('.').pop()?.toLowerCase();
-        finalDesktopType = ext === 'mp4' ? 'video' : 'image';
+        try {
+          finalDesktopUrl = await handleUpload(newAnimDesktopFile, 'background-desktop', 'anim');
+          const ext = newAnimDesktopFile.name.split('.').pop()?.toLowerCase();
+          finalDesktopType = ext === 'mp4' ? 'video' : 'image';
+        } catch (uploadErr: any) {
+          throw new Error(`Gagal mengunggah file animasi desktop ke storage: ${uploadErr.message}`);
+        }
       }
 
       // 3. Simpan Settings Utama
-      await updateSettings({
+      const settingsResult = await updateSettings({
         ...currentData,
         background_url: finalMobileUrl,
         background_type: finalMobileType,
@@ -279,70 +287,118 @@ export default function LatarMusikClient({
         desktop_background_type: finalDesktopType,
         updated_at: new Date().toISOString(),
       });
+      if (!settingsResult.success) {
+        throw new Error(`Gagal memperbarui pengaturan latar utama di database: ${settingsResult.error}`);
+      }
 
       // 4. Proses Background Mobile
       for (const id of deletedMobileIds) {
         const img = initialMobileBgImages.find(i => i.id === id);
-        if (img) await deleteBgImage(id, img.image_url, 'mobile');
+        if (img) {
+          const delRes = await deleteBgImage(id, img.image_url, 'mobile');
+          if (!delRes.success) {
+            throw new Error(`Gagal menghapus gambar latar mobile lama di database/storage: ${delRes.error}`);
+          }
+        }
       }
       const finalMobileImgs = [];
       for (let i = 0; i < mobileBgImages.length; i++) {
         const img = mobileBgImages[i];
         let finalUrl = img.image_url;
         if (newMobileFiles[img.id]) {
-          finalUrl = await handleUpload(newMobileFiles[img.id], 'background', (i + 1).toString());
+          try {
+            finalUrl = await handleUpload(newMobileFiles[img.id], 'background', (i + 1).toString());
+          } catch (uploadErr: any) {
+            throw new Error(`Gagal mengunggah gambar latar mobile baru ke storage: ${uploadErr.message}`);
+          }
         }
         
         if (img.id.startsWith('new-') || newMobileFiles[img.id]) {
           const result = await addBgImage({ device_type: 'mobile', image_url: finalUrl, display_order: i });
-          finalMobileImgs.push(result);
+          if (!result.success) {
+            throw new Error(`Gagal menyimpan data gambar latar mobile baru ke database: ${result.error}`);
+          }
+          finalMobileImgs.push(result.data!);
         } else {
-          await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
-          finalMobileImgs.push({ ...img, display_order: i, image_url: finalUrl });
+          const result = await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
+          if (!result.success) {
+            throw new Error(`Gagal memperbarui urutan gambar latar mobile di database: ${result.error}`);
+          }
+          finalMobileImgs.push(result.data!);
         }
       }
 
       // 5. Proses Background Desktop
       for (const id of deletedDesktopIds) {
         const img = initialDesktopBgImages.find(i => i.id === id);
-        if (img) await deleteBgImage(id, img.image_url, 'desktop');
+        if (img) {
+          const delRes = await deleteBgImage(id, img.image_url, 'desktop');
+          if (!delRes.success) {
+            throw new Error(`Gagal menghapus gambar latar desktop lama di database/storage: ${delRes.error}`);
+          }
+        }
       }
       const finalDesktopImgs = [];
       for (let i = 0; i < desktopBgImages.length; i++) {
         const img = desktopBgImages[i];
         let finalUrl = img.image_url;
         if (newDesktopFiles[img.id]) {
-          finalUrl = await handleUpload(newDesktopFiles[img.id], 'background-desktop', (i + 1).toString());
+          try {
+            finalUrl = await handleUpload(newDesktopFiles[img.id], 'background-desktop', (i + 1).toString());
+          } catch (uploadErr: any) {
+            throw new Error(`Gagal mengunggah gambar latar desktop baru ke storage: ${uploadErr.message}`);
+          }
         }
 
         if (img.id.startsWith('new-') || newDesktopFiles[img.id]) {
           const result = await addBgImage({ device_type: 'desktop', image_url: finalUrl, display_order: i });
-          finalDesktopImgs.push(result);
+          if (!result.success) {
+            throw new Error(`Gagal menyimpan data gambar latar desktop baru ke database: ${result.error}`);
+          }
+          finalDesktopImgs.push(result.data!);
         } else {
-          await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
-          finalDesktopImgs.push({ ...img, display_order: i, image_url: finalUrl });
+          const result = await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
+          if (!result.success) {
+            throw new Error(`Gagal memperbarui urutan gambar latar desktop di database: ${result.error}`);
+          }
+          finalDesktopImgs.push(result.data!);
         }
       }
 
       // 6. Proses Music Tracks
       for (const id of deletedTrackIds) {
         const track = initialTracks.find(t => t.id === id);
-        if (track) await deleteTrack(id, track.audio_url);
+        if (track) {
+          const delRes = await deleteTrack(id, track.audio_url);
+          if (!delRes.success) {
+            throw new Error(`Gagal menghapus file musik/lagu lama di database/storage: ${delRes.error}`);
+          }
+        }
       }
       const finalTracks = [];
       for (let i = 0; i < tracks.length; i++) {
         const track = tracks[i];
         let finalUrl = track.audio_url;
         if (newMusicFiles[track.id]) {
-          finalUrl = await handleUpload(newMusicFiles[track.id], 'backsound', (i + 1).toString());
+          try {
+            finalUrl = await handleUpload(newMusicFiles[track.id], 'backsound', (i + 1).toString());
+          } catch (uploadErr: any) {
+            throw new Error(`Gagal mengunggah file lagu baru "${track.title}" ke storage: ${uploadErr.message}`);
+          }
         }
 
         if (track.id.startsWith('new-')) {
           const result = await addTrack({ title: track.title, audio_url: finalUrl, display_order: i });
-          finalTracks.push(result);
+          if (!result.success) {
+            throw new Error(`Gagal menyimpan data lagu baru "${track.title}" ke database: ${result.error}`);
+          }
+          finalTracks.push(result.data!);
         } else {
-          await updateMusicTrackAction(track.id, { title: track.title, display_order: i, audio_url: finalUrl });
-          finalTracks.push({ ...track, title: track.title, display_order: i, audio_url: finalUrl });
+          const result = await updateMusicTrackAction(track.id, { title: track.title, display_order: i, audio_url: finalUrl });
+          if (!result.success) {
+            throw new Error(`Gagal memperbarui judul/urutan lagu "${track.title}" di database: ${result.error}`);
+          }
+          finalTracks.push(result.data!);
         }
       }
 
