@@ -15,6 +15,66 @@ import {
   CheckCircle
 } from 'lucide-react';
 
+// Fungsi pembantu untuk kompresi gambar di sisi client secara real-time
+function compressImage(file: File, maxWidth = 1200, maxWeightBytes = 300 * 1024): Promise<File> {
+  return new Promise((resolve) => {
+    // Jika file sangat kecil, tidak perlu dikompresi
+    if (file.size <= maxWeightBytes && !file.type.includes('image/png')) {
+      resolve(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Ubah skala jika melebihi lebar maksimal demi kinerja crawler
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        // Gambar ke canvas
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Ekspor ke Blob dengan format JPEG berkualitas 0.75 agar sangat ringan (< 300KB)
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          0.75
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+
 interface OptimasiSeoClientProps {
   initialSettings: SiteSettings;
 }
@@ -90,10 +150,16 @@ export default function OptimasiSeoClient({ initialSettings }: OptimasiSeoClient
   };
 
   // Menangani perubahan file
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setOgImageFile(file);
+    try {
+      const compressed = await compressImage(file);
+      setOgImageFile(compressed);
+    } catch (err) {
+      console.error('Gagal mengompresi gambar, menggunakan file asli:', err);
+      setOgImageFile(file);
+    }
   };
 
   // Helper preview
@@ -234,6 +300,25 @@ export default function OptimasiSeoClient({ initialSettings }: OptimasiSeoClient
               className="w-full px-4 py-3 rounded-xl border border-white/10 bg-neutral-950 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-settings-accent"
             />
           </div>
+        </div>
+
+        {/* Facebook App ID */}
+        <div className="space-y-1.5 pt-2">
+          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            FACEBOOK APP ID (OPSIONAL)
+            <span className="text-[9px] text-slate-500 font-sans capitalize">(Hilangkan peringatan fb:app_id)</span>
+          </label>
+          <input
+            type="text"
+            value={settings.fb_app_id || ''}
+            onChange={(e) => updateData(prev => ({ ...prev, fb_app_id: e.target.value || null }))}
+            placeholder="Contoh: 123456789012345"
+            className="w-full px-4 py-3 rounded-xl border border-white/10 bg-neutral-950 text-white placeholder-slate-600 text-sm focus:outline-none focus:border-settings-accent"
+          />
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            <Info className="w-3 h-3 text-slate-400 inline-block mr-1 -translate-y-0.5" />
+            Peringatan <code className="text-amber-500/90 font-mono">fb:app_id</code> pada Facebook Sharing Debugger bersifat opsional dan tidak wajib diisi jika Anda tidak memiliki aplikasi Facebook yang terdaftar di Facebook Developers. Mengosongkan field ini aman dan tidak akan memengaruhi tampilan gambar preview link di WhatsApp atau media sosial lainnya.
+          </p>
         </div>
 
         {/* OG Image */}

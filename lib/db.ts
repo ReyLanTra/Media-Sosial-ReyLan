@@ -53,6 +53,7 @@ export interface SiteSettings {
   push_notification_icon_url: string | null;
   push_notification_large_image_url: string | null;
   push_notification_badge_url: string | null;
+  fb_app_id?: string | null;
 }
 
 export interface Announcement {
@@ -220,6 +221,7 @@ const DEFAULT_SETTINGS: SiteSettings = {
   push_notification_icon_url: null,
   push_notification_large_image_url: null,
   push_notification_badge_url: null,
+  fb_app_id: null,
 };
 
 const DEFAULT_BUTTONS: SocialButton[] = [
@@ -310,7 +312,14 @@ export const getSiteSettings = async (): Promise<SiteSettings> => {
         console.warn('Supabase get settings error (mungkin tabel belum dibuat):', error.message);
         return DEFAULT_SETTINGS;
       }
-      if (data) return data as SiteSettings;
+      if (data) {
+        const resSettings = data as SiteSettings;
+        if (resSettings.fb_app_id === undefined || resSettings.fb_app_id === null) {
+          const db = readLocalDb();
+          resSettings.fb_app_id = db.site_settings.fb_app_id || null;
+        }
+        return resSettings;
+      }
 
       // Jika kosong (tabel ada tapi tidak ada data), inisialisasi baris pertama menggunakan admin client
       try {
@@ -352,7 +361,43 @@ export const updateSiteSettings = async (settings: Partial<SiteSettings>): Promi
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Jika gagal karena fb_app_id tidak ditemukan (column "fb_app_id" of relation "site_settings" does not exist),
+        // kita coba update kembali tanpa menyertakan fb_app_id ke database
+        if (error.message && error.message.includes('fb_app_id')) {
+          console.warn('Kolom fb_app_id tidak ditemukan di tabel site_settings Supabase. Melakukan update tanpa fb_app_id.');
+          const settingsWithoutFb = { ...settings };
+          delete settingsWithoutFb.fb_app_id;
+
+          const { data: retryData, error: retryError } = await supabase
+            .from('site_settings')
+            .update({
+              ...settingsWithoutFb,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', current.id)
+            .select()
+            .single();
+
+          if (retryError) throw retryError;
+          
+          // Gabungkan fb_app_id ke local db dan kembalian agar data persist & tidak hilang
+          const db = readLocalDb();
+          db.site_settings = { ...db.site_settings, ...settings };
+          writeLocalDb(db);
+
+          const result = retryData as SiteSettings;
+          result.fb_app_id = settings.fb_app_id;
+          return result;
+        }
+        throw error;
+      }
+      
+      // Jika berhasil, update juga ke local DB agar selaras
+      const db = readLocalDb();
+      db.site_settings = { ...db.site_settings, ...settings };
+      writeLocalDb(db);
+
       return data as SiteSettings;
     } catch (err) {
       console.error('Supabase error on update settings, falling back to local:', err);
