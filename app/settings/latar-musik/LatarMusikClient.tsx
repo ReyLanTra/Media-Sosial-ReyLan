@@ -163,8 +163,8 @@ function SortableBgItem({
       </div>
 
       {/* Action Buttons */}
-      <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-        <label className="p-1.5 rounded-full bg-blue-500/80 text-white cursor-pointer hover:bg-blue-600 transition-colors">
+      <div className="absolute top-1 right-1 flex gap-1 sm:opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        <label className="p-1.5 rounded-full bg-blue-500/80 text-white cursor-pointer hover:bg-blue-600 transition-colors shadow-lg">
           <input 
             type="file" 
             accept="image/*" 
@@ -178,7 +178,7 @@ function SortableBgItem({
         </label>
         <button 
           onClick={() => onDelete(img.id)}
-          className="p-1.5 rounded-full bg-red-500/80 text-white hover:bg-red-600 transition-colors"
+          className="p-1.5 rounded-full bg-red-500/80 text-white hover:bg-red-600 transition-colors shadow-lg"
         >
           <Trash2 className="w-3 h-3" />
         </button>
@@ -362,9 +362,9 @@ export default function LatarMusikClient({
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
       window.location.reload();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Gagal menyimpan perubahan. Periksa koneksi internet Anda.');
+      alert(`Gagal menyimpan perubahan: ${err.message || 'Terjadi kesalahan sistem'}`);
       throw err;
     }
   });

@@ -53,15 +53,15 @@ interface PengumumanClientProps {
 interface AnnouncementDraft extends Partial<Announcement> {
   id: string;
   isNew?: boolean;
-  tempAdminPhotoFile?: File;
-  tempMediaFile?: File;
+  tempAdminPhotoFile?: File | null;
+  tempMediaFile?: File | null;
   previewAdminPhotoUrl?: string;
   previewMediaUrl?: string;
 }
 
 export default function PengumumanClient({ initialAnnouncements }: PengumumanClientProps) {
   const [announcements, setAnnouncements] = React.useState<AnnouncementDraft[]>(
-    initialAnnouncements.sort((a, b) => (a.display_order || 0) - (b.display_order || 0))
+    initialAnnouncements.map(a => ({ ...a, isNew: false }))
   );
   const [isSaving, setIsSaving] = React.useState(false);
   const [notification, setNotification] = React.useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -84,11 +84,11 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
     const newId = `new-${Date.now()}`;
     const newAnnouncement: AnnouncementDraft = {
       id: newId,
-      admin_name: '',
+      admin_name: 'Admin',
       content_markdown: '',
       is_active: true,
       media_type: 'image',
-      start_at: new Date().toISOString().slice(0, 16),
+      start_at: new Date().toISOString(),
       end_at: null,
       display_order: announcements.length,
       isNew: true,
@@ -111,8 +111,8 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
       await removeAnnouncement(id, item.admin_photo_url || undefined, item.media_url || undefined);
       setAnnouncements(announcements.filter(a => a.id !== id));
       showNotify('success', 'Pengumuman berhasil dihapus.');
-    } catch (error) {
-      showNotify('error', 'Gagal menghapus pengumuman.');
+    } catch (error: any) {
+      showNotify('error', `Gagal menghapus: ${error.message}`);
     }
   };
 
@@ -183,9 +183,9 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
       }
       showNotify('success', 'Semua perubahan pengumuman berhasil disimpan.');
       window.location.reload();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      showNotify('error', 'Gagal menyimpan beberapa pengumuman.');
+      showNotify('error', `Gagal menyimpan: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -302,14 +302,14 @@ function SortableAnnouncementItem({
     <div 
       ref={setNodeRef} 
       style={style}
-      className="group relative p-6 rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-xl"
+      className="group relative p-4 sm:p-6 rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-xl"
     >
-      <div className="flex gap-6">
+      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
         {/* Drag Handle */}
         <div 
           {...attributes} 
           {...listeners} 
-          className="shrink-0 pt-2 cursor-grab active:cursor-grabbing text-slate-600 hover:text-blue-400 transition-colors touch-none"
+          className="shrink-0 hidden sm:flex pt-2 cursor-grab active:cursor-grabbing text-slate-600 hover:text-blue-400 transition-colors touch-none"
         >
           <GripVertical className="w-5 h-5" />
         </div>
@@ -318,15 +318,15 @@ function SortableAnnouncementItem({
           <div className="flex justify-between items-start gap-4">
             <div className="flex items-center gap-4 flex-1">
               {/* Admin Photo */}
-              <div className="relative w-12 h-12 rounded-full border border-white/10 bg-black/40 overflow-hidden group/admin shrink-0">
+              <div className="relative w-10 h-10 sm:w-12 sm:h-12 rounded-full border border-white/10 bg-black/40 overflow-hidden group/admin shrink-0">
                 {(item.previewAdminPhotoUrl || item.admin_photo_url) ? (
-                  <img src={item.previewAdminPhotoUrl || item.admin_photo_url || ''} className="w-full h-full object-cover" />
+                  <img src={item.previewAdminPhotoUrl || item.admin_photo_url || ''} className="w-full h-full object-cover" alt="Admin" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-slate-600">
                     <UserIcon className="w-5 h-5" />
                   </div>
                 )}
-                <label className="absolute inset-0 bg-black/60 opacity-0 group-hover/admin:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                <label className="absolute inset-0 bg-black/60 sm:opacity-0 group-hover/admin:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
                   <Upload className="w-3 h-3 text-white" />
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => onFileChange(item.id, 'admin_photo', e.target.files?.[0] || null)} />
                 </label>
@@ -340,7 +340,7 @@ function SortableAnnouncementItem({
                   placeholder="Nama Admin"
                   className="w-full bg-transparent border-none p-0 text-sm font-bold text-white placeholder-slate-600 focus:ring-0"
                 />
-                <span className="text-[10px] text-slate-500 font-mono uppercase">Pembuat Pengumuman</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-500 font-mono uppercase">Pembuat Pengumuman</span>
               </div>
             </div>
             
@@ -376,14 +376,14 @@ function SortableAnnouncementItem({
                 value={item.content_markdown || ''}
                 onChange={(e) => onUpdate(item.id, 'content_markdown', e.target.value)}
                 placeholder="Tulis pesan pengumuman menggunakan markdown..."
-                rows={4}
-                className="w-full bg-black/20 border border-white/10 rounded-xl p-4 text-sm text-slate-200 placeholder-slate-700 focus:border-blue-500/50 outline-none transition-all resize-none"
+                rows={3}
+                className="w-full bg-black/20 border border-white/10 rounded-xl p-3 sm:p-4 text-sm text-slate-200 placeholder-slate-700 focus:border-blue-500/50 outline-none transition-all resize-none"
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               {/* Media Content */}
-              <div className="space-y-3">
+              <div className="space-y-3 p-4 rounded-2xl border border-white/5 bg-black/10">
                 <div className="flex justify-between items-center">
                   <label className="text-[10px] font-bold text-slate-500 uppercase">MEDIA PENDUKUNG</label>
                   <select 
@@ -397,7 +397,7 @@ function SortableAnnouncementItem({
                   </select>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="relative w-20 h-20 rounded-2xl border-2 border-dashed border-white/10 bg-black/40 overflow-hidden group/media shrink-0">
+                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-dashed border-white/10 bg-black/40 overflow-hidden group/media shrink-0">
                     {(item.previewMediaUrl || item.media_url) ? (
                       item.media_type === 'video' ? (
                         <div className="w-full h-full flex items-center justify-center bg-blue-500/10">
@@ -408,14 +408,14 @@ function SortableAnnouncementItem({
                           <AudioIcon className="w-6 h-6 text-purple-400" />
                         </div>
                       ) : (
-                        <img src={item.previewMediaUrl || item.media_url || ''} className="w-full h-full object-cover" />
+                        <img src={item.previewMediaUrl || item.media_url || ''} className="w-full h-full object-cover" alt="Media" />
                       )
                     ) : (
                       <div className="w-full h-full flex flex-col items-center justify-center text-slate-700">
                         <ImageIcon className="w-5 h-5" />
                       </div>
                     )}
-                    <label className="absolute inset-0 bg-black/60 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                    <label className="absolute inset-0 bg-black/60 sm:opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
                       <Upload className="w-4 h-4 text-white" />
                       <input 
                         type="file" 
@@ -425,14 +425,14 @@ function SortableAnnouncementItem({
                       />
                     </label>
                   </div>
-                  <div className="flex-1 text-[10px] text-slate-500 italic">
+                  <div className="flex-1 text-[10px] text-slate-500 italic break-all">
                     {item.tempMediaFile ? item.tempMediaFile.name : item.media_url ? 'Media terunggah' : 'Belum ada media'}
                   </div>
                 </div>
               </div>
 
               {/* Timing Settings */}
-              <div className="space-y-4">
+              <div className="space-y-3 p-4 rounded-2xl border border-white/5 bg-black/10">
                 <label className="text-[10px] font-bold text-slate-500 uppercase">JADWAL TAYANG</label>
                 <div className="grid grid-cols-1 gap-3">
                   <div className="space-y-1">
@@ -464,12 +464,12 @@ function SortableAnnouncementItem({
             </div>
 
             {/* Note/Tips */}
-            <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex gap-3">
+            <div className="p-3 sm:p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex gap-3">
               <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <h4 className="text-[10px] font-bold text-blue-300">Tips Pengumuman</h4>
                 <p className="text-[9px] text-slate-400 leading-relaxed">
-                  Pengumuman akan otomatis muncul di bagian atas halaman utama pada waktu yang ditentukan. Dukungan markdown memungkinkan Anda membuat teks tebal, miring, atau list.
+                  Gunakan Markdown untuk styling teks. Kosongkan &quot;Hapus Otomatis&quot; jika ingin tayang selamanya (atau sampai ditutup manual).
                 </p>
               </div>
             </div>
