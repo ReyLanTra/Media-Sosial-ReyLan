@@ -153,18 +153,19 @@ function SortableBgItem({
     >
       <img src={img.image_url} alt="Bg Item" className="w-full h-full object-cover" />
       
-      {/* Drag Handle Overlay */}
+      {/* Drag Handle Pojok Kiri Atas (Permanen untuk Mobile) */}
       <div 
         {...attributes} 
         {...listeners} 
-        className="absolute inset-0 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 flex items-center justify-center bg-black/40 transition-opacity touch-none"
+        className="absolute top-1 left-1 p-1.5 rounded-lg bg-black/60 backdrop-blur border border-white/10 text-white/80 cursor-grab active:cursor-grabbing flex items-center justify-center transition-transform hover:scale-105 active:scale-95 touch-none z-10"
+        title="Geser untuk mengatur urutan"
       >
-        <GripVertical className="w-8 h-8 text-white/50" />
+        <GripVertical className="w-3.5 h-3.5" />
       </div>
 
-      {/* Action Buttons */}
-      <div className="absolute top-1 right-1 flex gap-1 sm:opacity-0 group-hover:opacity-100 transition-opacity z-10">
-        <label className="p-1.5 rounded-full bg-blue-500/80 text-white cursor-pointer hover:bg-blue-600 transition-colors shadow-lg">
+      {/* Action Buttons Pojok Kanan Atas (Permanen untuk Mobile) */}
+      <div className="absolute top-1 right-1 flex gap-1 z-10">
+        <label className="p-1.5 rounded-full bg-blue-600/90 text-white cursor-pointer hover:bg-blue-500 transition-colors shadow-md flex items-center justify-center active:scale-95">
           <input 
             type="file" 
             accept="image/*" 
@@ -178,7 +179,7 @@ function SortableBgItem({
         </label>
         <button 
           onClick={() => onDelete(img.id)}
-          className="p-1.5 rounded-full bg-red-500/80 text-white hover:bg-red-600 transition-colors shadow-lg"
+          className="p-1.5 rounded-full bg-red-600/90 text-white hover:bg-red-500 transition-colors shadow-md flex items-center justify-center active:scale-95"
         >
           <Trash2 className="w-3 h-3" />
         </button>

@@ -33,6 +33,7 @@ import {
   getStatusConfig,
 } from '@/lib/db';
 import { loginAdmin, logoutAdmin, isAuthenticated } from '@/lib/auth';
+import webpush from 'web-push';
 
 // --- AUTH ACTIONS ---
 
@@ -301,35 +302,68 @@ export async function reorderTracks(tracks: { id: string; display_order: number 
 // --- ANNOUNCEMENTS ---
 
 export async function fetchAnnouncements() {
-  return await getAnnouncements();
+  try {
+    const list = await getAnnouncements();
+    return { success: true, data: list };
+  } catch (err: any) {
+    console.error('Error in fetchAnnouncements action:', err);
+    return { success: false, error: err?.message || 'Gagal mengambil daftar pengumuman.' };
+  }
 }
 
 export async function createAnnouncement(data: Omit<Announcement, 'id'>) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  const item = await addAnnouncement(data);
-  revalidatePath('/');
-  return item;
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    const item = await addAnnouncement(data);
+    revalidatePath('/');
+    return { success: true, data: item };
+  } catch (err: any) {
+    console.error('Error in createAnnouncement action:', err);
+    return { success: false, error: err?.message || 'Gagal menambahkan pengumuman baru.' };
+  }
 }
 
 export async function updateAnnouncementAction(id: string, data: Partial<Announcement>) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  const item = await updateAnnouncement(id, data);
-  revalidatePath('/');
-  return item;
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    const item = await updateAnnouncement(id, data);
+    revalidatePath('/');
+    return { success: true, data: item };
+  } catch (err: any) {
+    console.error('Error in updateAnnouncementAction:', err);
+    return { success: false, error: err?.message || 'Gagal memperbarui pengumuman.' };
+  }
 }
 
 export async function removeAnnouncement(id: string, photoUrl?: string, mediaUrl?: string) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
-  
-  if (photoUrl) await deleteFileFromStorage('pengumuman-foto', photoUrl);
-  if (mediaUrl) await deleteFileFromStorage('pengumuman-media', mediaUrl);
-  
-  const success = await deleteAnnouncement(id);
-  revalidatePath('/');
-  return success;
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+    
+    if (photoUrl) {
+      try {
+        await deleteFileFromStorage('pengumuman-foto', photoUrl);
+      } catch (storageErr) {
+        console.warn('Gagal menghapus file foto dari storage:', storageErr);
+      }
+    }
+    if (mediaUrl) {
+      try {
+        await deleteFileFromStorage('pengumuman-media', mediaUrl);
+      } catch (storageErr) {
+        console.warn('Gagal menghapus file media dari storage:', storageErr);
+      }
+    }
+    
+    const success = await deleteAnnouncement(id);
+    revalidatePath('/');
+    return { success: true, data: success };
+  } catch (err: any) {
+    console.error('Error in removeAnnouncement action:', err);
+    return { success: false, error: err?.message || 'Gagal menghapus pengumuman.' };
+  }
 }
 
 // --- PUSH NOTIFICATIONS ---
@@ -344,18 +378,69 @@ export async function getSubscriptionsCount() {
 }
 
 export async function sendPushNotification(payload: { title: string; message: string; icon?: string; image?: string; badge?: string }) {
-  const authed = await isAuthenticated();
-  if (!authed) throw new Error('Akses ditolak.');
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, message: 'Akses ditolak. Anda tidak terautentikasi.' };
 
-  const subs = await getAllPushSubscriptions();
-  if (subs.length === 0) return { success: false, message: 'Tidak ada pengunjung yang terdaftar.' };
+    const subs = await getAllPushSubscriptions();
+    if (subs.length === 0) return { success: false, message: 'Tidak ada perangkat pengunjung yang terdaftar.' };
 
-  // Kirim notifikasi menggunakan API route server-side untuk memproses library web-push
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || ''}/api/push/send`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ payload, subscriptions: subs }),
-  });
+    const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
+    const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+    const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:example@yourdomain.com';
 
-  return await res.json();
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      return { 
+        success: false, 
+        message: 'VAPID keys belum dikonfigurasi di environment variable server (VAPID_PUBLIC_KEY & VAPID_PRIVATE_KEY).' 
+      };
+    }
+
+    // Inisialisasi web-push details
+    webpush.setVapidDetails(
+      vapidSubject,
+      vapidPublicKey,
+      vapidPrivateKey
+    );
+
+    const notificationPayload = JSON.stringify({
+      title: payload.title || 'Pesan Baru dari ReyLan',
+      body: payload.message || 'Cek informasi terbaru di halaman profil kami.',
+      icon: payload.icon || '/icon-192x192.png',
+      image: payload.image || undefined,
+      badge: payload.badge || undefined,
+      data: {
+        url: process.env.NEXT_PUBLIC_APP_URL || '/',
+      }
+    });
+
+    const results = await Promise.allSettled(
+      subs.map((sub: any) => 
+        webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: {
+              auth: sub.auth,
+              p256dh: sub.p256dh
+            }
+          },
+          notificationPayload
+        )
+      )
+    );
+
+    const successCount = results.filter(r => r.status === 'fulfilled').length;
+    const failCount = results.filter(r => r.status === 'rejected').length;
+
+    return { 
+      success: true, 
+      message: `Berhasil mengirim ke ${successCount} perangkat. Gagal: ${failCount}.`
+    };
+  } catch (error: any) {
+    console.error('Error in sendPushNotification:', error);
+    return { 
+      success: false, 
+      message: error?.message || 'Terjadi kesalahan sistem saat mengirim notifikasi.' 
+    };
+  }
 }

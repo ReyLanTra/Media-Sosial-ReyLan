@@ -5,7 +5,8 @@ import PengumumanClient from './PengumumanClient';
 export const revalidate = 0;
 
 export default async function PengumumanPage() {
-  const announcements = await fetchAnnouncements();
+  const res = await fetchAnnouncements();
+  const announcements = res.success && res.data ? res.data : [];
 
   return (
     <div className="space-y-6">

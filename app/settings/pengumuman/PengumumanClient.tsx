@@ -108,7 +108,10 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
     if (!confirm('Apakah Anda yakin ingin menghapus pengumuman ini?')) return;
 
     try {
-      await removeAnnouncement(id, item.admin_photo_url || undefined, item.media_url || undefined);
+      const res = await removeAnnouncement(id, item.admin_photo_url || undefined, item.media_url || undefined);
+      if (!res.success) {
+        throw new Error(res.error);
+      }
       setAnnouncements(announcements.filter(a => a.id !== id));
       showNotify('success', 'Pengumuman berhasil dihapus.');
     } catch (error: any) {
@@ -157,10 +160,18 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
 
         // Upload files if present
         if (item.tempAdminPhotoFile) {
-          finalAdminPhotoUrl = await handleUpload(item.tempAdminPhotoFile, 'pengumuman-foto');
+          try {
+            finalAdminPhotoUrl = await handleUpload(item.tempAdminPhotoFile, 'pengumuman-foto');
+          } catch (uploadErr: any) {
+            throw new Error(`Gagal mengunggah foto profil admin: ${uploadErr.message}`);
+          }
         }
         if (item.tempMediaFile) {
-          finalMediaUrl = await handleUpload(item.tempMediaFile, 'pengumuman-media');
+          try {
+            finalMediaUrl = await handleUpload(item.tempMediaFile, 'pengumuman-media');
+          } catch (uploadErr: any) {
+            throw new Error(`Gagal mengunggah media pendukung: ${uploadErr.message}`);
+          }
         }
 
         const data: any = {
@@ -176,9 +187,15 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
         };
 
         if (item.isNew) {
-          await createAnnouncement(data);
+          const res = await createAnnouncement(data);
+          if (!res.success) {
+            throw new Error(`Gagal menyimpan pengumuman baru dari "${data.admin_name}": ${res.error}`);
+          }
         } else {
-          await updateAnnouncementAction(item.id, data);
+          const res = await updateAnnouncementAction(item.id, data);
+          if (!res.success) {
+            throw new Error(`Gagal memperbarui pengumuman dari "${data.admin_name}": ${res.error}`);
+          }
         }
       }
       showNotify('success', 'Semua perubahan pengumuman berhasil disimpan.');

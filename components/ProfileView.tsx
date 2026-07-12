@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, ChevronRight } from 'lucide-react';
+import { Sparkles, ChevronRight, Bell, X } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { SiteSettings, SocialButton, BackgroundImage, MusicTrack, Announcement } from '@/lib/db';
 import BackgroundMedia from './BackgroundMedia';
@@ -33,17 +33,23 @@ export default function ProfileView({
   const isMobile = useIsMobile();
   const { permission, isSubscribed, subscribe } = usePushNotifications();
   const [hasEntered, setHasEntered] = React.useState(false);
+  const [showNotificationBanner, setShowNotificationBanner] = React.useState(false);
+
+  React.useEffect(() => {
+    if (hasEntered && typeof window !== 'undefined') {
+      const dismissed = localStorage.getItem('notification_banner_dismissed') === 'true';
+      if (permission === 'default' && !dismissed && !isSubscribed) {
+        const timer = setTimeout(() => {
+          setShowNotificationBanner(true);
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [hasEntered, permission, isSubscribed]);
 
   const handleEnter = () => {
     setHasEntered(true);
     
-    // Otomatis tawarkan berlangganan notifikasi jika belum
-    if (permission === 'default') {
-      setTimeout(() => {
-        subscribe();
-      }, 2000);
-    }
-
     // Kirim event kustom untuk memutar backsound
     const event = new CustomEvent('play-backsound');
     window.dispatchEvent(event);
@@ -448,6 +454,58 @@ export default function ProfileView({
                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping mt-1"></div>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showNotificationBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 left-4 right-4 md:left-auto md:right-6 md:w-96 p-4 rounded-3xl border border-white/10 bg-slate-950/85 backdrop-blur-xl shadow-2xl z-50 flex flex-col gap-3.5 text-left"
+          >
+            <div className="flex gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/10">
+                <Bell className="w-5 h-5 animate-bounce" style={{ animationDuration: '2s' }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-bold text-white">Aktifkan Notifikasi?</h4>
+                <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5">
+                  Dapatkan info pengumuman terbaru dan konten terhangat secara real-time langsung di perangkat Anda!
+                </p>
+              </div>
+              <button 
+                onClick={() => {
+                  localStorage.setItem('notification_banner_dismissed', 'true');
+                  setShowNotificationBanner(false);
+                }}
+                className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition-all self-start"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex items-center justify-end gap-2 text-[11px]">
+              <button
+                onClick={() => {
+                  localStorage.setItem('notification_banner_dismissed', 'true');
+                  setShowNotificationBanner(false);
+                }}
+                className="px-3.5 py-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 font-semibold transition-all"
+              >
+                Nanti Saja
+              </button>
+              <button
+                onClick={async () => {
+                  setShowNotificationBanner(false);
+                  await subscribe();
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition-all active:scale-95 shadow-md shadow-blue-600/20"
+              >
+                Izinkan Notifikasi
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
