@@ -236,6 +236,8 @@ export default function LatarMusikClient({
     })
   );
 
+  const [saveSuccess, setSaveSuccess] = React.useState(false);
+
   const {
     data: settings,
     updateData,
@@ -249,118 +251,123 @@ export default function LatarMusikClient({
     reset: resetDraft,
     save: saveDraft,
   } = useSettingsDraft<SiteSettings>(initialSettings, async (currentData) => {
-    // 1. Proses Upload Animasi Mobile jika ada
-    let finalMobileUrl = currentData.background_url;
-    let finalMobileType = currentData.background_type;
-    if (newAnimMobileFile) {
-      finalMobileUrl = await handleUpload(newAnimMobileFile, 'background', 'anim');
-      const ext = newAnimMobileFile.name.split('.').pop()?.toLowerCase();
-      finalMobileType = ext === 'mp4' ? 'video' : 'image';
-    }
-
-    // 2. Proses Upload Animasi Desktop jika ada
-    let finalDesktopUrl = currentData.desktop_background_url;
-    let finalDesktopType = currentData.desktop_background_type;
-    if (newAnimDesktopFile) {
-      finalDesktopUrl = await handleUpload(newAnimDesktopFile, 'background-desktop', 'anim');
-      const ext = newAnimDesktopFile.name.split('.').pop()?.toLowerCase();
-      finalDesktopType = ext === 'mp4' ? 'video' : 'image';
-    }
-
-    // 3. Simpan Settings Utama
-    await updateSettings({
-      ...currentData,
-      background_url: finalMobileUrl,
-      background_type: finalMobileType,
-      desktop_background_url: finalDesktopUrl,
-      desktop_background_type: finalDesktopType,
-      updated_at: new Date().toISOString(),
-    });
-
-    // 4. Proses Background Mobile (Add, Delete, Reorder)
-    for (const id of deletedMobileIds) {
-      const img = initialMobileBgImages.find(i => i.id === id);
-      if (img) await deleteBgImage(id, img.image_url, 'mobile');
-    }
-    const finalMobileImgs = [];
-    for (let i = 0; i < mobileBgImages.length; i++) {
-      const img = mobileBgImages[i];
-      let finalUrl = img.image_url;
-      if (newMobileFiles[img.id]) {
-        finalUrl = await handleUpload(newMobileFiles[img.id], 'background', (i + 1).toString());
+    try {
+      // 1. Proses Upload Animasi Mobile jika ada
+      let finalMobileUrl = currentData.background_url;
+      let finalMobileType = currentData.background_type;
+      if (newAnimMobileFile) {
+        finalMobileUrl = await handleUpload(newAnimMobileFile, 'background', 'anim');
+        const ext = newAnimMobileFile.name.split('.').pop()?.toLowerCase();
+        finalMobileType = ext === 'mp4' ? 'video' : 'image';
       }
+
+      // 2. Proses Upload Animasi Desktop jika ada
+      let finalDesktopUrl = currentData.desktop_background_url;
+      let finalDesktopType = currentData.desktop_background_type;
+      if (newAnimDesktopFile) {
+        finalDesktopUrl = await handleUpload(newAnimDesktopFile, 'background-desktop', 'anim');
+        const ext = newAnimDesktopFile.name.split('.').pop()?.toLowerCase();
+        finalDesktopType = ext === 'mp4' ? 'video' : 'image';
+      }
+
+      // 3. Simpan Settings Utama
+      await updateSettings({
+        ...currentData,
+        background_url: finalMobileUrl,
+        background_type: finalMobileType,
+        desktop_background_url: finalDesktopUrl,
+        desktop_background_type: finalDesktopType,
+        updated_at: new Date().toISOString(),
+      });
+
+      // 4. Proses Background Mobile
+      for (const id of deletedMobileIds) {
+        const img = initialMobileBgImages.find(i => i.id === id);
+        if (img) await deleteBgImage(id, img.image_url, 'mobile');
+      }
+      const finalMobileImgs = [];
+      for (let i = 0; i < mobileBgImages.length; i++) {
+        const img = mobileBgImages[i];
+        let finalUrl = img.image_url;
+        if (newMobileFiles[img.id]) {
+          finalUrl = await handleUpload(newMobileFiles[img.id], 'background', (i + 1).toString());
+        }
+        
+        if (img.id.startsWith('new-') || newMobileFiles[img.id]) {
+          const result = await addBgImage({ device_type: 'mobile', image_url: finalUrl, display_order: i });
+          finalMobileImgs.push(result);
+        } else {
+          await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
+          finalMobileImgs.push({ ...img, display_order: i, image_url: finalUrl });
+        }
+      }
+
+      // 5. Proses Background Desktop
+      for (const id of deletedDesktopIds) {
+        const img = initialDesktopBgImages.find(i => i.id === id);
+        if (img) await deleteBgImage(id, img.image_url, 'desktop');
+      }
+      const finalDesktopImgs = [];
+      for (let i = 0; i < desktopBgImages.length; i++) {
+        const img = desktopBgImages[i];
+        let finalUrl = img.image_url;
+        if (newDesktopFiles[img.id]) {
+          finalUrl = await handleUpload(newDesktopFiles[img.id], 'background-desktop', (i + 1).toString());
+        }
+
+        if (img.id.startsWith('new-') || newDesktopFiles[img.id]) {
+          const result = await addBgImage({ device_type: 'desktop', image_url: finalUrl, display_order: i });
+          finalDesktopImgs.push(result);
+        } else {
+          await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
+          finalDesktopImgs.push({ ...img, display_order: i, image_url: finalUrl });
+        }
+      }
+
+      // 6. Proses Music Tracks
+      for (const id of deletedTrackIds) {
+        const track = initialTracks.find(t => t.id === id);
+        if (track) await deleteTrack(id, track.audio_url);
+      }
+      const finalTracks = [];
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i];
+        let finalUrl = track.audio_url;
+        if (newMusicFiles[track.id]) {
+          finalUrl = await handleUpload(newMusicFiles[track.id], 'backsound', (i + 1).toString());
+        }
+
+        if (track.id.startsWith('new-')) {
+          const result = await addTrack({ title: track.title, audio_url: finalUrl, display_order: i });
+          finalTracks.push(result);
+        } else {
+          await updateMusicTrackAction(track.id, { title: track.title, display_order: i, audio_url: finalUrl });
+          finalTracks.push({ ...track, title: track.title, display_order: i, audio_url: finalUrl });
+        }
+      }
+
+      // Cleanup & Refresh
+      setMobileBgImages(finalMobileImgs);
+      setDesktopBgImages(finalDesktopImgs);
+      setTracks(finalTracks);
+      setNewMobileFiles({});
+      setNewDesktopFiles({});
+      setNewMusicFiles({});
+      setDeletedMobileIds([]);
+      setDeletedDesktopIds([]);
+      setDeletedTrackIds([]);
+      setNewAnimMobileFile(null);
+      setNewAnimDesktopFile(null);
       
-      if (img.id.startsWith('new-') || newMobileFiles[img.id]) {
-        const result = await addBgImage({ device_type: 'mobile', image_url: finalUrl, display_order: i });
-        finalMobileImgs.push(result);
-      } else {
-        await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
-        finalMobileImgs.push({ ...img, display_order: i, image_url: finalUrl });
-      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      window.location.reload();
+    } catch (err) {
+      console.error(err);
+      alert('Gagal menyimpan perubahan. Periksa koneksi internet Anda.');
+      throw err;
     }
-
-    // 5. Proses Background Desktop (Add, Delete, Reorder)
-    for (const id of deletedDesktopIds) {
-      const img = initialDesktopBgImages.find(i => i.id === id);
-      if (img) await deleteBgImage(id, img.image_url, 'desktop');
-    }
-    const finalDesktopImgs = [];
-    for (let i = 0; i < desktopBgImages.length; i++) {
-      const img = desktopBgImages[i];
-      let finalUrl = img.image_url;
-      if (newDesktopFiles[img.id]) {
-        finalUrl = await handleUpload(newDesktopFiles[img.id], 'background-desktop', (i + 1).toString());
-      }
-
-      if (img.id.startsWith('new-') || newDesktopFiles[img.id]) {
-        const result = await addBgImage({ device_type: 'desktop', image_url: finalUrl, display_order: i });
-        finalDesktopImgs.push(result);
-      } else {
-        await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
-        finalDesktopImgs.push({ ...img, display_order: i, image_url: finalUrl });
-      }
-    }
-
-    // 6. Proses Music Tracks (Add, Delete, Update, Reorder)
-    for (const id of deletedTrackIds) {
-      const track = initialTracks.find(t => t.id === id);
-      if (track) await deleteTrack(id, track.audio_url);
-    }
-    const finalTracks = [];
-    for (let i = 0; i < tracks.length; i++) {
-      const track = tracks[i];
-      let finalUrl = track.audio_url;
-      if (newMusicFiles[track.id]) {
-        finalUrl = await handleUpload(newMusicFiles[track.id], 'backsound', (i + 1).toString());
-      }
-
-      if (track.id.startsWith('new-')) {
-        const result = await addTrack({ title: track.title, audio_url: finalUrl, display_order: i });
-        finalTracks.push(result);
-      } else {
-        await updateMusicTrackAction(track.id, { title: track.title, display_order: i, audio_url: finalUrl });
-        finalTracks.push({ ...track, title: track.title, display_order: i, audio_url: finalUrl });
-      }
-    }
-
-    // Update local state after save
-    setMobileBgImages(finalMobileImgs);
-    setDesktopBgImages(finalDesktopImgs);
-    setTracks(finalTracks);
-    setNewMobileFiles({});
-    setNewDesktopFiles({});
-    setNewMusicFiles({});
-    setNewAnimMobileFile(null);
-    setNewAnimDesktopFile(null);
-    setDeletedMobileIds([]);
-    setDeletedDesktopIds([]);
-    setDeletedTrackIds([]);
-
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
   });
-
-  const [saveSuccess, setSaveSuccess] = React.useState(false);
 
   // --- DRAG & DROP LOGIC ---
 
@@ -379,17 +386,23 @@ export default function LatarMusikClient({
 
     if (over && active.id !== over.id) {
       if (dragTarget === 'music') {
-        const oldIdx = tracks.findIndex(t => t.id === active.id);
-        const newIdx = tracks.findIndex(t => t.id === over.id);
-        setTracks(arrayMove(tracks, oldIdx, newIdx));
+        setTracks((prev) => {
+          const oldIdx = prev.findIndex(t => t.id === active.id);
+          const newIdx = prev.findIndex(t => t.id === over.id);
+          return arrayMove(prev, oldIdx, newIdx);
+        });
       } else if (dragTarget === 'mobile') {
-        const oldIdx = mobileBgImages.findIndex(m => m.id === active.id);
-        const newIdx = mobileBgImages.findIndex(m => m.id === over.id);
-        setMobileBgImages(arrayMove(mobileBgImages, oldIdx, newIdx));
+        setMobileBgImages((prev) => {
+          const oldIdx = prev.findIndex(m => m.id === active.id);
+          const newIdx = prev.findIndex(m => m.id === over.id);
+          return arrayMove(prev, oldIdx, newIdx);
+        });
       } else if (dragTarget === 'desktop') {
-        const oldIdx = desktopBgImages.findIndex(d => d.id === active.id);
-        const newIdx = desktopBgImages.findIndex(d => d.id === over.id);
-        setDesktopBgImages(arrayMove(desktopBgImages, oldIdx, newIdx));
+        setDesktopBgImages((prev) => {
+          const oldIdx = prev.findIndex(d => d.id === active.id);
+          const newIdx = prev.findIndex(d => d.id === over.id);
+          return arrayMove(prev, oldIdx, newIdx);
+        });
       }
     }
   };

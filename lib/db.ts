@@ -57,13 +57,14 @@ export interface SiteSettings {
 
 export interface Announcement {
   id: string;
-  title: string;
-  content: string;
-  is_active: boolean;
-  photo_url: string | null;
+  admin_name: string;
+  admin_photo_url: string | null;
+  content_markdown: string;
   media_url: string | null;
-  cta_text: string | null;
-  cta_url: string | null;
+  media_type: 'image' | 'video' | 'audio' | null;
+  start_at: string; // ISO Date String
+  end_at: string | null; // ISO Date String
+  is_active: boolean;
   display_order: number;
   created_at?: string;
   updated_at?: string;

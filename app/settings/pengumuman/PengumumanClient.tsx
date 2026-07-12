@@ -13,8 +13,12 @@ import {
   EyeOff,
   Image as ImageIcon,
   Video as VideoIcon,
+  Music as AudioIcon,
   ExternalLink,
-  Info
+  Info,
+  Calendar,
+  User as UserIcon,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -49,9 +53,10 @@ interface PengumumanClientProps {
 interface AnnouncementDraft extends Partial<Announcement> {
   id: string;
   isNew?: boolean;
-  tempPhotoFile?: File;
+  tempAdminPhotoFile?: File;
   tempMediaFile?: File;
-  previewUrl?: string;
+  previewAdminPhotoUrl?: string;
+  previewMediaUrl?: string;
 }
 
 export default function PengumumanClient({ initialAnnouncements }: PengumumanClientProps) {
@@ -72,12 +77,19 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
   };
 
   const handleAdd = () => {
+    if (announcements.length >= 5) {
+      alert('Maksimal 5 pengumuman sekaligus.');
+      return;
+    }
     const newId = `new-${Date.now()}`;
     const newAnnouncement: AnnouncementDraft = {
       id: newId,
-      title: 'Pengumuman Baru',
-      content: 'Isi pengumuman Anda di sini...',
+      admin_name: '',
+      content_markdown: '',
       is_active: true,
+      media_type: 'image',
+      start_at: new Date().toISOString().slice(0, 16),
+      end_at: null,
       display_order: announcements.length,
       isNew: true,
     };
@@ -96,7 +108,7 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
     if (!confirm('Apakah Anda yakin ingin menghapus pengumuman ini?')) return;
 
     try {
-      await removeAnnouncement(id, item.photo_url || undefined, item.media_url || undefined);
+      await removeAnnouncement(id, item.admin_photo_url || undefined, item.media_url || undefined);
       setAnnouncements(announcements.filter(a => a.id !== id));
       showNotify('success', 'Pengumuman berhasil dihapus.');
     } catch (error) {
@@ -104,7 +116,7 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
     }
   };
 
-  const handleFileChange = (id: string, type: 'photo' | 'media', file: File | null) => {
+  const handleFileChange = (id: string, type: 'admin_photo' | 'media', file: File | null) => {
     if (!file) return;
     
     const previewUrl = URL.createObjectURL(file);
@@ -112,8 +124,8 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
       if (a.id === id) {
         return {
           ...a,
-          [type === 'photo' ? 'tempPhotoFile' : 'tempMediaFile']: file,
-          previewUrl: previewUrl
+          [type === 'admin_photo' ? 'tempAdminPhotoFile' : 'tempMediaFile']: file,
+          [type === 'admin_photo' ? 'previewAdminPhotoUrl' : 'previewMediaUrl']: previewUrl
         };
       }
       return a;
@@ -140,26 +152,27 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
     setIsSaving(true);
     try {
       for (const item of announcements) {
-        let finalPhotoUrl = item.photo_url;
-        let finalMediaUrl = item.media_url;
+        let finalAdminPhotoUrl = item.admin_photo_url || null;
+        let finalMediaUrl = item.media_url || null;
 
         // Upload files if present
-        if (item.tempPhotoFile) {
-          finalPhotoUrl = await handleUpload(item.tempPhotoFile, 'pengumuman-foto');
+        if (item.tempAdminPhotoFile) {
+          finalAdminPhotoUrl = await handleUpload(item.tempAdminPhotoFile, 'pengumuman-foto');
         }
         if (item.tempMediaFile) {
           finalMediaUrl = await handleUpload(item.tempMediaFile, 'pengumuman-media');
         }
 
         const data: any = {
-          title: item.title,
-          content: item.content,
+          admin_name: item.admin_name || 'Admin',
+          admin_photo_url: finalAdminPhotoUrl,
+          content_markdown: item.content_markdown || '',
+          media_url: finalMediaUrl,
+          media_type: item.media_type || 'image',
+          start_at: item.start_at || new Date().toISOString(),
+          end_at: item.end_at || null,
           is_active: item.is_active,
           display_order: item.display_order,
-          photo_url: finalPhotoUrl,
-          media_url: finalMediaUrl,
-          cta_text: item.cta_text,
-          cta_url: item.cta_url,
         };
 
         if (item.isNew) {
@@ -169,7 +182,6 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
         }
       }
       showNotify('success', 'Semua perubahan pengumuman berhasil disimpan.');
-      // Refresh list to remove 'isNew' and 'temp' flags
       window.location.reload();
     } catch (error) {
       console.error(error);
@@ -198,27 +210,35 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
         )}
       </AnimatePresence>
 
-      <div className="flex justify-between items-center">
-        <button
-          onClick={handleAdd}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-all active:scale-95"
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Pengumuman
-        </button>
+      <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10">
+        <div className="space-y-1">
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider">Kelola Antrian (Max 5)</h3>
+          <p className="text-[10px] text-slate-500">Urutan di sini menentukan urutan tampil di halaman utama.</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleAdd}
+            disabled={announcements.length >= 5}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold transition-all active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            Tambah
+          </button>
 
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="flex items-center gap-2 px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-bold transition-all active:scale-95 shadow-lg shadow-emerald-600/20"
-        >
-          {isSaving ? (
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          Simpan Perubahan
-        </button>
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-bold transition-all active:scale-95 shadow-lg shadow-emerald-600/20"
+          >
+            {isSaving ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Simpan
+          </button>
+        </div>
       </div>
 
       <DndContext 
@@ -226,7 +246,7 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
         collisionDetection={closestCenter} 
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={announcements} strategy={verticalListSortingStrategy}>
+        <SortableContext items={announcements.map(a => a.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-4">
             {announcements.map((item) => (
               <SortableAnnouncementItem 
@@ -260,7 +280,7 @@ function SortableAnnouncementItem({
   item: AnnouncementDraft; 
   onRemove: (id: string) => void;
   onUpdate: (id: string, field: keyof AnnouncementDraft, value: any) => void;
-  onFileChange: (id: string, type: 'photo' | 'media', file: File | null) => void;
+  onFileChange: (id: string, type: 'admin_photo' | 'media', file: File | null) => void;
 }) {
   const {
     attributes,
@@ -282,35 +302,46 @@ function SortableAnnouncementItem({
     <div 
       ref={setNodeRef} 
       style={style}
-      className="group relative p-5 rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-xl"
+      className="group relative p-6 rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-md shadow-xl"
     >
       <div className="flex gap-6">
         {/* Drag Handle */}
         <div 
           {...attributes} 
           {...listeners} 
-          className="shrink-0 pt-2 cursor-grab active:cursor-grabbing text-slate-600 hover:text-blue-400 transition-colors"
+          className="shrink-0 pt-2 cursor-grab active:cursor-grabbing text-slate-600 hover:text-blue-400 transition-colors touch-none"
         >
           <GripVertical className="w-5 h-5" />
         </div>
 
-        <div className="flex-1 space-y-5">
+        <div className="flex-1 space-y-6">
           <div className="flex justify-between items-start gap-4">
-            <div className="flex-1 space-y-1">
-              <input 
-                type="text" 
-                value={item.title}
-                onChange={(e) => onUpdate(item.id, 'title', e.target.value)}
-                placeholder="Judul Pengumuman"
-                className="w-full bg-transparent border-none p-0 text-lg font-bold text-white placeholder-slate-600 focus:ring-0"
-              />
-              <textarea 
-                value={item.content}
-                onChange={(e) => onUpdate(item.id, 'content', e.target.value)}
-                placeholder="Tulis detail pengumuman di sini..."
-                rows={2}
-                className="w-full bg-transparent border-none p-0 text-sm text-slate-400 placeholder-slate-700 focus:ring-0 resize-none"
-              />
+            <div className="flex items-center gap-4 flex-1">
+              {/* Admin Photo */}
+              <div className="relative w-12 h-12 rounded-full border border-white/10 bg-black/40 overflow-hidden group/admin shrink-0">
+                {(item.previewAdminPhotoUrl || item.admin_photo_url) ? (
+                  <img src={item.previewAdminPhotoUrl || item.admin_photo_url || ''} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-slate-600">
+                    <UserIcon className="w-5 h-5" />
+                  </div>
+                )}
+                <label className="absolute inset-0 bg-black/60 opacity-0 group-hover/admin:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                  <Upload className="w-3 h-3 text-white" />
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => onFileChange(item.id, 'admin_photo', e.target.files?.[0] || null)} />
+                </label>
+              </div>
+
+              <div className="flex-1">
+                <input 
+                  type="text" 
+                  value={item.admin_name || ''}
+                  onChange={(e) => onUpdate(item.id, 'admin_name', e.target.value)}
+                  placeholder="Nama Admin"
+                  className="w-full bg-transparent border-none p-0 text-sm font-bold text-white placeholder-slate-600 focus:ring-0"
+                />
+                <span className="text-[10px] text-slate-500 font-mono uppercase">Pembuat Pengumuman</span>
+              </div>
             </div>
             
             <div className="flex items-center gap-2">
@@ -321,7 +352,7 @@ function SortableAnnouncementItem({
                     ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
                     : 'bg-slate-800 border-white/10 text-slate-500'
                 }`}
-                title={item.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                title={item.is_active ? 'Aktif' : 'Nonaktif'}
               >
                 {item.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
               </button>
@@ -334,68 +365,99 @@ function SortableAnnouncementItem({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Media Upload */}
-            <div className="space-y-3">
-              <label className="text-[10px] font-mono tracking-widest text-slate-500 uppercase">MEDIA (FOTO/VIDEO)</label>
-              <div className="flex items-start gap-4">
-                <div className="relative w-24 h-24 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 overflow-hidden group/media shrink-0">
-                  {(item.previewUrl || item.photo_url || item.media_url) ? (
-                    item.media_url?.match(/\.(mp4|webm|ogg)$/) || item.tempMediaFile ? (
-                      <video 
-                        src={item.previewUrl || item.media_url || ''} 
-                        className="w-full h-full object-cover" 
-                      />
+          <div className="space-y-4">
+            {/* Markdown Editor Area */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                <FileText className="w-3 h-3" />
+                <span>Pesan Pengumuman (Markdown Support)</span>
+              </div>
+              <textarea 
+                value={item.content_markdown || ''}
+                onChange={(e) => onUpdate(item.id, 'content_markdown', e.target.value)}
+                placeholder="Tulis pesan pengumuman menggunakan markdown..."
+                rows={4}
+                className="w-full bg-black/20 border border-white/10 rounded-xl p-4 text-sm text-slate-200 placeholder-slate-700 focus:border-blue-500/50 outline-none transition-all resize-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Media Content */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">MEDIA PENDUKUNG</label>
+                  <select 
+                    value={item.media_type || 'image'}
+                    onChange={(e) => onUpdate(item.id, 'media_type', e.target.value)}
+                    className="bg-transparent border-none p-0 text-[10px] font-bold text-blue-400 focus:ring-0 outline-none cursor-pointer"
+                  >
+                    <option value="image">Gambar</option>
+                    <option value="video">Video</option>
+                    <option value="audio">Audio</option>
+                  </select>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="relative w-20 h-20 rounded-2xl border-2 border-dashed border-white/10 bg-black/40 overflow-hidden group/media shrink-0">
+                    {(item.previewMediaUrl || item.media_url) ? (
+                      item.media_type === 'video' ? (
+                        <div className="w-full h-full flex items-center justify-center bg-blue-500/10">
+                          <VideoIcon className="w-6 h-6 text-blue-400" />
+                        </div>
+                      ) : item.media_type === 'audio' ? (
+                        <div className="w-full h-full flex items-center justify-center bg-purple-500/10">
+                          <AudioIcon className="w-6 h-6 text-purple-400" />
+                        </div>
+                      ) : (
+                        <img src={item.previewMediaUrl || item.media_url || ''} className="w-full h-full object-cover" />
+                      )
                     ) : (
-                      <img 
-                        src={item.previewUrl || item.photo_url || item.media_url || ''} 
-                        className="w-full h-full object-cover"
-                        referrerPolicy="no-referrer"
-                      />
-                    )
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-700">
-                      <ImageIcon className="w-6 h-6 mb-1" />
-                      <span className="text-[8px]">KOSONG</span>
-                    </div>
-                  )}
-                  
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/media:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                    <label className="cursor-pointer p-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors">
-                      <Upload className="w-3.5 h-3.5 text-white" />
+                      <div className="w-full h-full flex flex-col items-center justify-center text-slate-700">
+                        <ImageIcon className="w-5 h-5" />
+                      </div>
+                    )}
+                    <label className="absolute inset-0 bg-black/60 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                      <Upload className="w-4 h-4 text-white" />
                       <input 
                         type="file" 
-                        accept="image/*,video/*" 
+                        accept={item.media_type === 'video' ? 'video/*' : item.media_type === 'audio' ? 'audio/*' : 'image/*'} 
                         className="hidden" 
-                        onChange={(e) => onFileChange(item.id, 'media', e.target.files?.[0] || null)}
+                        onChange={(e) => onFileChange(item.id, 'media', e.target.files?.[0] || null)} 
                       />
                     </label>
                   </div>
+                  <div className="flex-1 text-[10px] text-slate-500 italic">
+                    {item.tempMediaFile ? item.tempMediaFile.name : item.media_url ? 'Media terunggah' : 'Belum ada media'}
+                  </div>
                 </div>
+              </div>
 
-                <div className="flex-1 space-y-3">
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] font-bold text-slate-400">Teks Tombol (CTA)</label>
+              {/* Timing Settings */}
+              <div className="space-y-4">
+                <label className="text-[10px] font-bold text-slate-500 uppercase">JADWAL TAYANG</label>
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold mb-1">
+                      <Calendar className="w-3 h-3" />
+                      Mulai Tayang
+                    </div>
                     <input 
-                      type="text" 
-                      value={item.cta_text || ''}
-                      onChange={(e) => onUpdate(item.id, 'cta_text', e.target.value)}
-                      placeholder="Contoh: Daftar Sekarang"
-                      className="w-full px-3 py-2 rounded-xl bg-black/30 border border-white/10 text-xs text-white focus:border-blue-500/50 outline-none transition-all"
+                      type="datetime-local" 
+                      value={item.start_at ? item.start_at.slice(0, 16) : ''}
+                      onChange={(e) => onUpdate(item.id, 'start_at', e.target.value ? new Date(e.target.value).toISOString() : '')}
+                      className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500/50 transition-all"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[9px] font-bold text-slate-400">Link Tujuan (URL)</label>
-                    <div className="relative">
-                      <input 
-                        type="url" 
-                        value={item.cta_url || ''}
-                        onChange={(e) => onUpdate(item.id, 'cta_url', e.target.value)}
-                        placeholder="https://..."
-                        className="w-full pl-3 pr-8 py-2 rounded-xl bg-black/30 border border-white/10 text-xs text-white focus:border-blue-500/50 outline-none transition-all"
-                      />
-                      <ExternalLink className="absolute right-2.5 top-2.5 w-3 h-3 text-slate-600" />
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-bold mb-1">
+                      <Calendar className="w-3 h-3" />
+                      Hapus Otomatis (Opsional)
                     </div>
+                    <input 
+                      type="datetime-local" 
+                      value={item.end_at ? item.end_at.slice(0, 16) : ''}
+                      onChange={(e) => onUpdate(item.id, 'end_at', e.target.value ? new Date(e.target.value).toISOString() : null)}
+                      className="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-blue-500/50 transition-all"
+                    />
                   </div>
                 </div>
               </div>
@@ -403,11 +465,11 @@ function SortableAnnouncementItem({
 
             {/* Note/Tips */}
             <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex gap-3">
-              <Info className="w-5 h-5 text-blue-400 shrink-0" />
+              <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <h4 className="text-[11px] font-bold text-blue-300">Tips Pengumuman</h4>
-                <p className="text-[10px] text-slate-400 leading-relaxed">
-                  Gunakan foto/video berukuran 1:1 atau persegi untuk tampilan terbaik. Pengumuman akan muncul secara berurutan sesuai posisi di dashboard ini.
+                <h4 className="text-[10px] font-bold text-blue-300">Tips Pengumuman</h4>
+                <p className="text-[9px] text-slate-400 leading-relaxed">
+                  Pengumuman akan otomatis muncul di bagian atas halaman utama pada waktu yang ditentukan. Dukungan markdown memungkinkan Anda membuat teks tebal, miring, atau list.
                 </p>
               </div>
             </div>
