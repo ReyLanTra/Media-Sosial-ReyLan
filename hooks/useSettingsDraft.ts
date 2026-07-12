@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from 'react';
 
 export function useSettingsDraft<T>(
   initialData: T,
-  onSaveCallback: (currentData: T) => Promise<void>
+  onSaveCallback: (currentData: T) => Promise<void | T>
 ) {
   // Simpan data asli dari DB
   const [dbData, setDbData] = useState<T>(initialData);
@@ -71,10 +71,11 @@ export function useSettingsDraft<T>(
     setIsSaving(true);
     setError(null);
     try {
-      await onSaveCallback(currentData);
-      setDbData(currentData);
+      const savedResult = await onSaveCallback(currentData);
+      const dataToSave = (savedResult !== undefined && savedResult !== null) ? (savedResult as T) : currentData;
+      setDbData(dataToSave);
       // Reset history stack agar saat ini menjadi titik awal baru
-      setHistory([currentData]);
+      setHistory([dataToSave]);
       setCurrentIndex(0);
     } catch (err: any) {
       console.error('Gagal menyimpan perubahan:', err);

@@ -767,7 +767,12 @@ export const deleteFileFromStorage = async (bucketName: string, fileUrl: string 
       const matchPattern = `/storage/v1/object/public/${bucketName}/`;
       const index = fileUrl.indexOf(matchPattern);
       if (index !== -1) {
-        const filePath = fileUrl.substring(index + matchPattern.length);
+        let filePath = fileUrl.substring(index + matchPattern.length);
+        // Hapus query string jika ada (misal ?updated=timestamp) agar penghapusan file di bucket berhasil
+        const qIdx = filePath.indexOf('?');
+        if (qIdx !== -1) {
+          filePath = filePath.substring(0, qIdx);
+        }
         const { error } = await supabase.storage.from(bucketName).remove([filePath]);
         if (error) throw error;
         return true;

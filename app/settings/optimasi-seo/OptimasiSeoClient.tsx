@@ -47,7 +47,15 @@ export default function OptimasiSeoClient({ initialSettings }: OptimasiSeoClient
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah gambar Open Graph.');
-      finalData.og_image_url = data.url;
+      
+      // Bersihkan query string lama dari URL hasil upload jika ada
+      let baseUrl = data.url;
+      const qIdx = baseUrl.indexOf('?');
+      if (qIdx !== -1) {
+        baseUrl = baseUrl.substring(0, qIdx);
+      }
+      // Tambahkan parameter cache-busting terbaru agar CDN dan browser tidak menyajikan cache lama
+      finalData.og_image_url = `${baseUrl}?updated=${Date.now()}`;
     }
 
     // 2. Simpan ke database
@@ -59,6 +67,8 @@ export default function OptimasiSeoClient({ initialSettings }: OptimasiSeoClient
     setOgImageFile(null);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
+
+    return finalData;
   });
 
   // Set flag kotor pada level sessionStorage

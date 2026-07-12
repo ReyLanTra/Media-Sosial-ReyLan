@@ -51,7 +51,13 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah foto profil.');
-      finalData.profile_photo_url = data.url;
+      
+      let baseUrl = data.url;
+      const qIdx = baseUrl.indexOf('?');
+      if (qIdx !== -1) {
+        baseUrl = baseUrl.substring(0, qIdx);
+      }
+      finalData.profile_photo_url = `${baseUrl}?updated=${Date.now()}`;
     }
 
     // 2. Jika ada unggahan favicon kustom yang tertunda, unggah sekarang
@@ -62,7 +68,13 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah favicon.');
-      finalData.favicon_url = data.url;
+      
+      let baseUrl = data.url;
+      const qIdx = baseUrl.indexOf('?');
+      if (qIdx !== -1) {
+        baseUrl = baseUrl.substring(0, qIdx);
+      }
+      finalData.favicon_url = `${baseUrl}?updated=${Date.now()}`;
     }
 
     // 3. Simpan seluruh konfigurasi ke database
@@ -76,6 +88,8 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
     setFaviconFile(null);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
+
+    return finalData;
   });
 
   // Set flag kotor pada level sessionStorage untuk dideteksi oleh layout saat navigasi
