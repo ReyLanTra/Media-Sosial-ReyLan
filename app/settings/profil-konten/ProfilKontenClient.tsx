@@ -13,9 +13,12 @@ import {
   User, 
   FileText, 
   Sparkles,
-  Info 
+  Info,
+  BadgeCheck,
+  Code
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import DOMPurify from 'isomorphic-dompurify';
 
 interface ProfilKontenClientProps {
   initialSettings: SiteSettings;
@@ -25,6 +28,7 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
   // Simpan file asli yang diunggah sementara di sisi klien
   const [profilePhotoFile, setProfilePhotoFile] = React.useState<File | null>(null);
   const [faviconFile, setFaviconFile] = React.useState<File | null>(null);
+  const [badgeFile, setBadgeFile] = React.useState<File | null>(null);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
 
   // Hook untuk draft, undo, redo, batal, dsb.
@@ -77,7 +81,33 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
       finalData.favicon_url = `${baseUrl}?updated=${Date.now()}`;
     }
 
-    // 3. Simpan seluruh konfigurasi ke database
+    // 3. Jika ada unggahan badge kustom yang tertunda
+    if (badgeFile) {
+      const formData = new FormData();
+      formData.append('file', badgeFile);
+      formData.append('bucket', 'badge-centang');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah badge.');
+      
+      let baseUrl = data.url;
+      const qIdx = baseUrl.indexOf('?');
+      if (qIdx !== -1) {
+        baseUrl = baseUrl.substring(0, qIdx);
+      }
+      finalData.badge_image_url = `${baseUrl}?updated=${Date.now()}`;
+    }
+
+    // Sanitasi kode SVG jika tipenya svg_code
+    if (finalData.badge_type === 'svg_code' && finalData.badge_svg_code) {
+      finalData.badge_svg_code = DOMPurify.sanitize(finalData.badge_svg_code, {
+        USE_PROFILES: { svg: true },
+        FORBID_TAGS: ['script', 'foreignObject'],
+        FORBID_ATTR: ['onclick', 'onload', 'onerror']
+      });
+    }
+
+    // 4. Simpan seluruh konfigurasi ke database
     const saveResult = await updateSettings(finalData);
     if (!saveResult.success) {
       throw new Error(saveResult.error || 'Gagal menyimpan profil & konten.');
@@ -86,43 +116,46 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
     // Reset file temporer setelah sukses menyimpan
     setProfilePhotoFile(null);
     setFaviconFile(null);
+    setBadgeFile(null);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
 
     return finalData;
   });
 
-  // Set flag kotor pada level sessionStorage untuk dideteksi oleh layout saat navigasi
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
-      const dirty = isDirty || !!profilePhotoFile || !!faviconFile;
+      const dirty = isDirty || !!profilePhotoFile || !!faviconFile || !!badgeFile;
       if (dirty) {
         sessionStorage.setItem('isSettingsDraftDirty', 'true');
       } else {
         sessionStorage.removeItem('isSettingsDraftDirty');
       }
     }
-  }, [isDirty, profilePhotoFile, faviconFile]);
+  }, [isDirty, profilePhotoFile, faviconFile, badgeFile]);
 
   // Batal semua perubahan draf
   const handleCancelAll = () => {
     setProfilePhotoFile(null);
     setFaviconFile(null);
+    setBadgeFile(null);
     resetDraft();
   };
 
   // Menangani perubahan file
   const handleFileChange = (
     e: React.ChangeEvent<HTMLInputElement>,
-    type: 'profile_photo' | 'favicon'
+    type: 'profile_photo' | 'favicon' | 'badge'
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (type === 'profile_photo') {
       setProfilePhotoFile(file);
-    } else {
+    } else if (type === 'favicon') {
       setFaviconFile(file);
+    } else {
+      setBadgeFile(file);
     }
   };
 
@@ -426,16 +459,128 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
               </div>
 
               {/* Toggle Centang Verifikasi */}
-              <div className="flex items-center h-12 px-4 rounded-xl border border-white/10 bg-neutral-950">
-                <label className="flex items-center gap-3 cursor-pointer w-full justify-between">
-                  <span className="text-xs font-semibold text-slate-300">Tampilkan Badge Centang Biru (Verified)</span>
-                  <input
-                    type="checkbox"
-                    checked={settings.is_verified}
-                    onChange={(e) => updateData(prev => ({ ...prev, is_verified: e.target.checked }))}
-                    className="w-4 h-4 rounded accent-settings-accent cursor-pointer"
-                  />
-                </label>
+              <div className="space-y-4">
+                <div className="flex items-center h-12 px-4 rounded-xl border border-white/10 bg-neutral-950">
+                  <label className="flex items-center gap-3 cursor-pointer w-full justify-between">
+                    <span className="text-xs font-semibold text-slate-300">Tampilkan Badge Terverifikasi (Centang)</span>
+                    <input
+                      type="checkbox"
+                      checked={settings.is_verified}
+                      onChange={(e) => updateData(prev => ({ ...prev, is_verified: e.target.checked }))}
+                      className="w-4 h-4 rounded accent-settings-accent cursor-pointer"
+                    />
+                  </label>
+                </div>
+
+                {settings.is_verified && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 rounded-xl border border-white/5 bg-white/5 space-y-4"
+                  >
+                    <div className="space-y-1.5">
+                      <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                        TIPE BADGE CENTANG
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'png', label: 'Gambar PNG' },
+                          { id: 'svg_file', label: 'File SVG' },
+                          { id: 'svg_code', label: 'Kode SVG' },
+                        ].map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => updateData(prev => ({ ...prev, badge_type: opt.id as any }))}
+                            className={`px-3 py-2 rounded-lg text-[10px] font-bold border transition-all ${
+                              settings.badge_type === opt.id
+                                ? 'bg-settings-accent/20 border-settings-accent text-settings-accent'
+                                : 'bg-neutral-950 border-white/10 text-slate-500 hover:border-white/20'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {settings.badge_type === 'svg_code' ? (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400 flex justify-between items-center">
+                            <span>MARKUP KODE SVG</span>
+                            <Code className="w-3 h-3" />
+                          </label>
+                          <div className="flex gap-3">
+                            <textarea
+                              value={settings.badge_svg_code || ''}
+                              onChange={(e) => updateData(prev => ({ ...prev, badge_svg_code: e.target.value }))}
+                              placeholder="<svg>...</svg>"
+                              rows={5}
+                              className="flex-1 px-4 py-3 rounded-xl border border-white/10 bg-neutral-950 text-white font-mono text-[10px] focus:outline-none focus:border-settings-accent resize-none"
+                            />
+                            <div className="w-24 h-24 rounded-xl border border-white/10 bg-neutral-950 flex flex-col items-center justify-center p-2 shrink-0">
+                              <span className="text-[8px] text-slate-500 font-mono mb-2">PRATINJAU</span>
+                              <div 
+                                className="w-10 h-10 flex items-center justify-center overflow-hidden"
+                                dangerouslySetInnerHTML={{ 
+                                  __html: DOMPurify.sanitize(settings.badge_svg_code || '', { 
+                                    USE_PROFILES: { svg: true },
+                                    FORBID_TAGS: ['script', 'foreignObject'],
+                                    FORBID_ATTR: ['onclick', 'onload', 'onerror']
+                                  }) 
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="block text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                            URL BADGE LANGSUNG
+                          </label>
+                          <div className="flex gap-3">
+                            <input
+                              type="url"
+                              value={settings.badge_image_url || ''}
+                              onChange={(e) => updateData(prev => ({ ...prev, badge_image_url: e.target.value }))}
+                              placeholder="https://example.com/badge.png"
+                              className="flex-1 px-4 h-11 rounded-xl border border-white/10 bg-neutral-950 text-white placeholder-slate-600 text-xs focus:outline-none focus:border-settings-accent"
+                            />
+                            <div className="w-11 h-11 rounded-xl border border-white/10 bg-neutral-950 flex items-center justify-center p-1 shrink-0 overflow-hidden">
+                              {badgeFile ? (
+                                <img src={URL.createObjectURL(badgeFile)} alt="Preview" className="max-w-full max-h-full object-contain" />
+                              ) : settings.badge_image_url ? (
+                                <img src={settings.badge_image_url} alt="Badge" className="max-w-full max-h-full object-contain" />
+                              ) : (
+                                <BadgeCheck className="w-5 h-5 text-slate-600" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <input
+                            type="file"
+                            accept={settings.badge_type === 'png' ? "image/png" : ".svg, image/svg+xml"}
+                            onChange={(e) => handleFileChange(e, 'badge')}
+                            className="hidden"
+                            id="upload-badge-file"
+                          />
+                          <label
+                            htmlFor="upload-badge-file"
+                            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl border border-dashed border-white/20 hover:border-white/40 bg-neutral-950 text-[10px] font-bold cursor-pointer text-slate-400 hover:text-white transition-all duration-300 uppercase tracking-wider"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>{badgeFile ? `Terpilih: ${badgeFile.name.substring(0, 15)}...` : `Upload ${settings.badge_type === 'png' ? 'PNG' : 'SVG'}`}</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
               </div>
             </div>
           </div>

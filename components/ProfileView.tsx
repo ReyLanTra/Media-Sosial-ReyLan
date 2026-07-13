@@ -376,7 +376,7 @@ export default function ProfileView({
           <div className="space-y-1.5">
             <motion.h1 className="font-display text-2xl font-bold tracking-tight text-white flex items-center justify-center gap-1.5">
               <span>{settings.account_name}</span>
-              {settings.is_verified && <VerificationBadge className="w-6 h-6" />}
+              {settings.is_verified && <VerificationBadge settings={settings} className="w-6 h-6" />}
             </motion.h1>
             {settings.tagline_text && (
               <motion.p className="text-xs font-mono text-blue-300 tracking-widest uppercase font-semibold">
