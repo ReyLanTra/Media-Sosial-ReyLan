@@ -52,7 +52,10 @@ export default function NotifikasiClient({ initialSubscriberCount }: NotifikasiC
       return;
     }
 
-    if (!confirm(`Kirim notifikasi ini ke ${initialSubscriberCount} pelanggan?`)) return;
+    const confirmMessage = initialSubscriberCount > 0 
+      ? `Kirim notifikasi ini ke ${initialSubscriberCount} pelanggan?`
+      : 'Kirim notifikasi ini ke semua pelanggan terdaftar di browser/perangkat mereka?';
+    if (!confirm(confirmMessage)) return;
 
     setIsSending(true);
     try {
@@ -162,7 +165,7 @@ export default function NotifikasiClient({ initialSubscriberCount }: NotifikasiC
 
             <button
               type="submit"
-              disabled={isSending || initialSubscriberCount === 0}
+              disabled={isSending}
               className="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold transition-all active:scale-[0.98] flex items-center justify-center gap-3 shadow-lg shadow-blue-600/20"
             >
               {isSending ? (
@@ -176,8 +179,8 @@ export default function NotifikasiClient({ initialSubscriberCount }: NotifikasiC
             </button>
 
             {initialSubscriberCount === 0 && (
-              <p className="text-[10px] text-center text-amber-500/80 font-mono italic">
-                * Belum ada pengunjung yang mengizinkan notifikasi di perangkat mereka.
+              <p className="text-[10px] text-center text-slate-400 font-sans leading-relaxed">
+                <span className="text-amber-500 font-bold">* Info:</span> Jumlah pelanggan yang ditampilkan saat ini adalah <code className="text-amber-400">0</code>. Namun, Anda tetap dapat mengirimkan notifikasi ini. Sistem akan mengirimkannya ke seluruh perangkat pengunjung yang telah mengizinkan notifikasi browser secara real-time.
               </p>
             )}
           </form>
