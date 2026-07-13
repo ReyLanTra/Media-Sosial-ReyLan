@@ -4,7 +4,6 @@ import * as React from 'react';
 import { useSettingsDraft } from '@/hooks/useSettingsDraft';
 import { updateSettings } from '@/app/actions';
 import { SiteSettings } from '@/lib/db';
-import { handleUpload } from '@/lib/supabase';
 import { 
   Upload, 
   RotateCcw, 
@@ -50,8 +49,14 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
 
     // 1. Jika ada unggahan foto profil kustom yang tertunda, unggah sekarang
     if (profilePhotoFile) {
-      const url = await handleUpload(profilePhotoFile, 'foto-profil');
-      let baseUrl = url;
+      const formData = new FormData();
+      formData.append('file', profilePhotoFile);
+      formData.append('bucket', 'foto-profil');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah foto profil.');
+      
+      let baseUrl = data.url;
       const qIdx = baseUrl.indexOf('?');
       if (qIdx !== -1) {
         baseUrl = baseUrl.substring(0, qIdx);
@@ -61,8 +66,14 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
 
     // 2. Jika ada unggahan favicon kustom yang tertunda, unggah sekarang
     if (faviconFile) {
-      const url = await handleUpload(faviconFile, 'favicon');
-      let baseUrl = url;
+      const formData = new FormData();
+      formData.append('file', faviconFile);
+      formData.append('bucket', 'favicon');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah favicon.');
+      
+      let baseUrl = data.url;
       const qIdx = baseUrl.indexOf('?');
       if (qIdx !== -1) {
         baseUrl = baseUrl.substring(0, qIdx);
@@ -72,8 +83,14 @@ export default function ProfilKontenClient({ initialSettings }: ProfilKontenClie
 
     // 3. Jika ada unggahan badge kustom yang tertunda
     if (badgeFile) {
-      const url = await handleUpload(badgeFile, 'badge-centang');
-      let baseUrl = url;
+      const formData = new FormData();
+      formData.append('file', badgeFile);
+      formData.append('bucket', 'badge-centang');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Gagal mengunggah badge.');
+      
+      let baseUrl = data.url;
       const qIdx = baseUrl.indexOf('?');
       if (qIdx !== -1) {
         baseUrl = baseUrl.substring(0, qIdx);

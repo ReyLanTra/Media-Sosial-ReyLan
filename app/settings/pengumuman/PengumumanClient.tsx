@@ -162,9 +162,6 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
         if (item.tempAdminPhotoFile) {
           try {
             finalAdminPhotoUrl = await handleUpload(item.tempAdminPhotoFile, 'pengumuman-foto');
-            // Update state so it doesn't upload again if next item fails
-            handleUpdateField(item.id, 'admin_photo_url', finalAdminPhotoUrl);
-            handleUpdateField(item.id, 'tempAdminPhotoFile', null);
           } catch (uploadErr: any) {
             throw new Error(`Gagal mengunggah foto profil admin: ${uploadErr.message}`);
           }
@@ -172,9 +169,6 @@ export default function PengumumanClient({ initialAnnouncements }: PengumumanCli
         if (item.tempMediaFile) {
           try {
             finalMediaUrl = await handleUpload(item.tempMediaFile, 'pengumuman-media');
-            // Update state
-            handleUpdateField(item.id, 'media_url', finalMediaUrl);
-            handleUpdateField(item.id, 'tempMediaFile', null);
           } catch (uploadErr: any) {
             throw new Error(`Gagal mengunggah media pendukung: ${uploadErr.message}`);
           }

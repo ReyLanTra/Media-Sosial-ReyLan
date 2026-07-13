@@ -32,6 +32,8 @@ export default function AudioPlayer({ tracks, volume, enabled, accountName, prof
   });
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
+  const currentTrack = tracks[currentTrackIdx];
+
   const playNext = React.useCallback(() => {
     setCurrentTrackIdx((prev) => (prev + 1) % tracks.length);
   }, [tracks.length]);
@@ -39,43 +41,6 @@ export default function AudioPlayer({ tracks, volume, enabled, accountName, prof
   const playPrevious = React.useCallback(() => {
     setCurrentTrackIdx((prev) => (prev - 1 + tracks.length) % tracks.length);
   }, [tracks.length]);
-
-  const currentTrack = tracks[currentTrackIdx];
-
-  // Initialize audio element only once
-  React.useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const audio = new Audio();
-    audioRef.current = audio;
-
-    const handleEnded = () => {
-      playNext();
-    };
-
-    audio.addEventListener('ended', handleEnded);
-    return () => {
-      audio.removeEventListener('ended', handleEnded);
-      audio.pause();
-      audio.src = '';
-    };
-  }, [playNext]);
-
-  // Handle current track changes
-  React.useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || !currentTrack || !enabled) return;
-
-    const isSameSrc = audio.src === currentTrack.audio_url || 
-                     (currentTrack.audio_url.startsWith('http') && audio.src.includes(currentTrack.audio_url));
-
-    if (!isSameSrc) {
-      audio.src = currentTrack.audio_url;
-      audio.load();
-      if (isPlaying) {
-        audio.play().catch(console.error);
-      }
-    }
-  }, [currentTrack, enabled, isPlaying]);
 
   // Media Session API Setup
   React.useEffect(() => {
@@ -95,12 +60,8 @@ export default function AudioPlayer({ tracks, volume, enabled, accountName, prof
       audioRef.current?.pause();
       setIsPlaying(false);
     });
-    navigator.mediaSession.setActionHandler('previoustrack', () => {
-      playPrevious();
-    });
-    navigator.mediaSession.setActionHandler('nexttrack', () => {
-      playNext();
-    });
+    navigator.mediaSession.setActionHandler('previoustrack', playPrevious);
+    navigator.mediaSession.setActionHandler('nexttrack', playNext);
 
     return () => {
       navigator.mediaSession.setActionHandler('play', null);
@@ -110,23 +71,41 @@ export default function AudioPlayer({ tracks, volume, enabled, accountName, prof
     };
   }, [currentTrack, accountName, profilePhotoUrl, playNext, playPrevious]);
 
-  // Handle Play/Pause and Enabled/Disabled
+  // Initialize and handle playlist auto-next
   React.useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    if (!enabled) {
-      audio.pause();
-      if (isPlaying) setIsPlaying(false);
+    if (!currentTrack || !enabled) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
       return;
     }
 
+    const audio = new Audio(currentTrack.audio_url);
+    audio.volume = volume / 100;
+    audioRef.current = audio;
+
+    audio.onended = playNext;
+
     if (isPlaying) {
       audio.play().catch(console.error);
-    } else {
-      audio.pause();
     }
-  }, [isPlaying, enabled]);
+
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, [currentTrackIdx, tracks.length, enabled, currentTrack, isPlaying, volume, playNext]);
+
+  // Handle isPlaying synchronization when disabled
+  React.useEffect(() => {
+    if ((!currentTrack || !enabled) && isPlaying) {
+      const timer = setTimeout(() => setIsPlaying(false), 0);
+      return () => clearTimeout(timer);
+    }
+  }, [currentTrack, enabled, isPlaying]);
 
   // Volume control
   React.useEffect(() => {
