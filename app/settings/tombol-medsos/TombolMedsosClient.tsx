@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useSettingsDraft } from '@/hooks/useSettingsDraft';
 import { addBtn, updateBtn, deleteBtn, reorderButtons } from '@/app/actions';
 import { SocialButton } from '@/lib/db';
+import { handleUpload } from '@/lib/supabase';
 import { 
   Plus, 
   Trash2, 
@@ -308,17 +309,7 @@ export default function TombolMedsosClient({ initialButtons }: TombolMedsosClien
       if (logoFile) {
         setIsUploadingLogo(true);
         try {
-          const formData = new FormData();
-          formData.append('file', logoFile);
-          formData.append('bucket', 'logo-medsos');
-          formData.append('customId', buttonId);
-
-          const res = await fetch('/api/upload', { method: 'POST', body: formData });
-          const data = await res.json();
-          if (!res.ok || !data.success) {
-            throw new Error(data.error || 'Gagal mengunggah logo medsos.');
-          }
-          finalLogo = data.url;
+          finalLogo = await handleUpload(logoFile, 'logo-medsos', buttonId);
         } catch (uploadErr: any) {
           alert(`Error saat mengunggah logo: ${uploadErr.message}`);
           setIsUploadingLogo(false);
