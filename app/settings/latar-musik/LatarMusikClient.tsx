@@ -309,17 +309,25 @@ export default function LatarMusikClient({
         if (newMobileFiles[img.id]) {
           try {
             finalUrl = await handleUpload(newMobileFiles[img.id], 'background', (i + 1).toString());
+            // Bersihkan file dari draf setelah sukses upload agar tidak terkirim ulang jika simpan berikutnya gagal
+            setNewMobileFiles(prev => {
+              const next = { ...prev };
+              delete next[img.id];
+              return next;
+            });
           } catch (uploadErr: any) {
             throw new Error(`Gagal mengunggah gambar latar mobile baru ke storage: ${uploadErr.message}`);
           }
         }
         
-        if (img.id.startsWith('new-') || newMobileFiles[img.id]) {
+        if (img.id.startsWith('new-')) {
           const result = await addBgImage({ device_type: 'mobile', image_url: finalUrl, display_order: i });
           if (!result.success) {
             throw new Error(`Gagal menyimpan data gambar latar mobile baru ke database: ${result.error}`);
           }
           finalMobileImgs.push(result.data!);
+          // Update local state id if successful
+          setMobileBgImages(prev => prev.map(m => m.id === img.id ? result.data! : m));
         } else {
           const result = await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
           if (!result.success) {
@@ -346,17 +354,23 @@ export default function LatarMusikClient({
         if (newDesktopFiles[img.id]) {
           try {
             finalUrl = await handleUpload(newDesktopFiles[img.id], 'background-desktop', (i + 1).toString());
+            setNewDesktopFiles(prev => {
+              const next = { ...prev };
+              delete next[img.id];
+              return next;
+            });
           } catch (uploadErr: any) {
             throw new Error(`Gagal mengunggah gambar latar desktop baru ke storage: ${uploadErr.message}`);
           }
         }
 
-        if (img.id.startsWith('new-') || newDesktopFiles[img.id]) {
+        if (img.id.startsWith('new-')) {
           const result = await addBgImage({ device_type: 'desktop', image_url: finalUrl, display_order: i });
           if (!result.success) {
             throw new Error(`Gagal menyimpan data gambar latar desktop baru ke database: ${result.error}`);
           }
           finalDesktopImgs.push(result.data!);
+          setDesktopBgImages(prev => prev.map(d => d.id === img.id ? result.data! : d));
         } else {
           const result = await updateBgImage(img.id, { display_order: i, image_url: finalUrl });
           if (!result.success) {
@@ -383,6 +397,11 @@ export default function LatarMusikClient({
         if (newMusicFiles[track.id]) {
           try {
             finalUrl = await handleUpload(newMusicFiles[track.id], 'backsound', (i + 1).toString());
+            setNewMusicFiles(prev => {
+              const next = { ...prev };
+              delete next[track.id];
+              return next;
+            });
           } catch (uploadErr: any) {
             throw new Error(`Gagal mengunggah file lagu baru "${track.title}" ke storage: ${uploadErr.message}`);
           }
@@ -394,6 +413,7 @@ export default function LatarMusikClient({
             throw new Error(`Gagal menyimpan data lagu baru "${track.title}" ke database: ${result.error}`);
           }
           finalTracks.push(result.data!);
+          setTracks(prev => prev.map(t => t.id === track.id ? result.data! : t));
         } else {
           const result = await updateMusicTrackAction(track.id, { title: track.title, display_order: i, audio_url: finalUrl });
           if (!result.success) {
