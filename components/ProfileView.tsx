@@ -12,6 +12,7 @@ import ShareButton from './ShareButton';
 import AccessDenied from './AccessDenied';
 import AnnouncementCard from './AnnouncementCard';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import PhotoLightbox from './PhotoLightbox';
 
 interface ProfileViewProps {
   settings: SiteSettings;
@@ -34,6 +35,7 @@ export default function ProfileView({
   const { permission, isSubscribed, subscribe } = usePushNotifications();
   const [hasEntered, setHasEntered] = React.useState(false);
   const [showNotificationBanner, setShowNotificationBanner] = React.useState(false);
+  const [isLightboxOpen, setIsLightboxOpen] = React.useState(false);
 
   React.useEffect(() => {
     if (hasEntered && typeof window !== 'undefined') {
@@ -359,7 +361,10 @@ export default function ProfileView({
               style={getGlowStyle()}
               className="absolute -inset-1.5 rounded-full blur-lg opacity-70 group-hover:opacity-100 transition-opacity duration-500 animate-pulse"
             ></div>
-            <div className="relative w-28 h-28 rounded-full p-1 bg-white/20 border border-white/30 backdrop-blur-md overflow-hidden">
+            <div 
+              onClick={() => settings.profile_photo_url && setIsLightboxOpen(true)}
+              className="relative w-28 h-28 rounded-full p-1 bg-white/20 border border-white/30 backdrop-blur-md overflow-hidden cursor-pointer active:scale-95 transition-transform duration-200"
+            >
               {settings.profile_photo_url ? (
                 <img src={settings.profile_photo_url} alt={settings.account_name} className="w-full h-full object-cover rounded-full" referrerPolicy="no-referrer" />
               ) : (
@@ -507,6 +512,16 @@ export default function ProfileView({
               </button>
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isLightboxOpen && settings.profile_photo_url && (
+          <PhotoLightbox
+            src={settings.profile_photo_url}
+            alt={settings.account_name}
+            onClose={() => setIsLightboxOpen(false)}
+          />
         )}
       </AnimatePresence>
     </div>

@@ -33,14 +33,33 @@ export default function AudioPlayer({ tracks, volume, enabled, accountName, prof
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const playNext = React.useCallback(() => {
-    setCurrentTrackIdx((prev) => (prev + 1) % tracks.length);
+    if (tracks.length === 1) {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(console.error);
+      }
+    } else {
+      setCurrentTrackIdx((prev) => (prev + 1) % tracks.length);
+    }
   }, [tracks.length]);
 
   const playPrevious = React.useCallback(() => {
-    setCurrentTrackIdx((prev) => (prev - 1 + tracks.length) % tracks.length);
+    if (tracks.length === 1) {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(console.error);
+      }
+    } else {
+      setCurrentTrackIdx((prev) => (prev - 1 + tracks.length) % tracks.length);
+    }
   }, [tracks.length]);
 
   const currentTrack = tracks[currentTrackIdx];
+
+  const tracksRef = React.useRef(tracks);
+  React.useEffect(() => {
+    tracksRef.current = tracks;
+  }, [tracks]);
 
   // Initialize audio element only once
   React.useEffect(() => {
@@ -49,7 +68,13 @@ export default function AudioPlayer({ tracks, volume, enabled, accountName, prof
     audioRef.current = audio;
 
     const handleEnded = () => {
-      playNext();
+      const currentTracks = tracksRef.current;
+      if (currentTracks.length === 1) {
+        audio.currentTime = 0;
+        audio.play().catch(console.error);
+      } else {
+        playNext();
+      }
     };
 
     audio.addEventListener('ended', handleEnded);
@@ -117,7 +142,11 @@ export default function AudioPlayer({ tracks, volume, enabled, accountName, prof
 
     if (!enabled) {
       audio.pause();
-      if (isPlaying) setIsPlaying(false);
+      if (isPlaying) {
+        Promise.resolve().then(() => {
+          setIsPlaying(false);
+        });
+      }
       return;
     }
 
