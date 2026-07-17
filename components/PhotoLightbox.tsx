@@ -194,7 +194,7 @@ export default function PhotoLightbox({ src, alt, onClose }: PhotoLightboxProps)
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 mountaineer-overlay z-[100000] flex flex-col items-center justify-center bg-slate-950/45 backdrop-blur-3xl select-none"
+      className="fixed inset-0 mountaineer-overlay z-[100000] flex flex-col items-center justify-center bg-white/[0.03] backdrop-blur-3xl border border-white/10 shadow-[inset_0_0_80px_rgba(255,255,255,0.05)] select-none"
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >

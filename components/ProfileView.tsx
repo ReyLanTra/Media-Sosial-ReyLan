@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, ChevronRight, Bell, X } from 'lucide-react';
+import { Sparkles, ChevronRight, Bell, X, Maximize2, Minimize2 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { SiteSettings, SocialButton, BackgroundImage, MusicTrack, Announcement } from '@/lib/db';
 import BackgroundMedia from './BackgroundMedia';
@@ -36,6 +36,33 @@ export default function ProfileView({
   const [hasEntered, setHasEntered] = React.useState(false);
   const [showNotificationBanner, setShowNotificationBanner] = React.useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = React.useState(false);
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (typeof window === 'undefined') return;
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.log('Error requesting fullscreen:', err);
+      });
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch((err) => {
+          console.log('Error exiting fullscreen:', err);
+        });
+      }
+    }
+  };
 
   React.useEffect(() => {
     if (hasEntered && typeof window !== 'undefined') {
@@ -52,6 +79,13 @@ export default function ProfileView({
   const handleEnter = () => {
     setHasEntered(true);
     
+    // Aktifkan full screen secara otomatis saat masuk jika didukung
+    if (typeof document !== 'undefined' && document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.log('Fullscreen request ignored or failed', err);
+      });
+    }
+
     // Kirim event kustom untuk memutar backsound
     const event = new CustomEvent('play-backsound');
     window.dispatchEvent(event);
@@ -333,6 +367,22 @@ export default function ProfileView({
 
       {/* Share Button */}
       <ShareButton />
+
+      {/* Tombol Full Screen */}
+      <div className="fixed top-6 left-6 z-[9998]">
+        <button
+          onClick={toggleFullscreen}
+          id="btn-fullscreen-toggle"
+          className="w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-white/20 transition-all shadow-lg active:scale-95 cursor-pointer"
+          title={isFullscreen ? 'Keluar Layar Penuh' : 'Layar Penuh'}
+        >
+          {isFullscreen ? (
+            <Minimize2 className="w-4 h-4" />
+          ) : (
+            <Maximize2 className="w-4 h-4" />
+          )}
+        </button>
+      </div>
 
       {/* Audio Player */}
       <AudioPlayer
