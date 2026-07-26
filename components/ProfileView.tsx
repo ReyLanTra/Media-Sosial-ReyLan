@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles, ChevronRight, Bell, X, Maximize2, Minimize2 } from 'lucide-react';
+import { Sparkles, ChevronRight, Bell, X, Maximize2, Minimize2, ChevronUp, ChevronDown } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { SiteSettings, SocialButton, BackgroundImage, MusicTrack, Announcement } from '@/lib/db';
 import BackgroundMedia from './BackgroundMedia';
@@ -37,6 +37,46 @@ export default function ProfileView({
   const [showNotificationBanner, setShowNotificationBanner] = React.useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
+
+  const contentScrollRef = React.useRef<HTMLDivElement>(null);
+  const [canScrollUp, setCanScrollUp] = React.useState(false);
+  const [canScrollDown, setCanScrollDown] = React.useState(false);
+
+  const checkScroll = React.useCallback(() => {
+    const el = contentScrollRef.current;
+    if (!el) return;
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    setCanScrollUp(scrollTop > 10);
+    setCanScrollDown(scrollTop + clientHeight < scrollHeight - 10);
+  }, []);
+
+  React.useEffect(() => {
+    const el = contentScrollRef.current;
+    if (!el) return;
+    checkScroll();
+    const timer = setTimeout(checkScroll, 300);
+    const interval = setInterval(checkScroll, 1000);
+    el.addEventListener('scroll', checkScroll, { passive: true });
+    window.addEventListener('resize', checkScroll);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      el.removeEventListener('scroll', checkScroll);
+      window.removeEventListener('resize', checkScroll);
+    };
+  }, [checkScroll, buttons, hasEntered]);
+
+  const handleScrollUp = () => {
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollBy({ top: -200, behavior: 'smooth' });
+    }
+  };
+
+  const handleScrollDown = () => {
+    if (contentScrollRef.current) {
+      contentScrollRef.current.scrollBy({ top: 200, behavior: 'smooth' });
+    }
+  };
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -330,7 +370,7 @@ export default function ProfileView({
   };
 
   return (
-    <div className={`fixed inset-0 h-screen w-screen overflow-hidden flex flex-col items-center justify-between p-6 text-white font-sans transition-all duration-300 ${
+    <div className={`fixed inset-0 h-screen w-screen overflow-hidden flex flex-col items-center justify-between p-6 text-white font-sans transition-all duration-300 main-page-no-scrollbar ${
       settings.disable_scroll ? 'touch-none' : ''
     }`}>
       {/* Dynamic Style Injector */}
@@ -393,12 +433,40 @@ export default function ProfileView({
         profilePhotoUrl={settings.profile_photo_url || undefined}
       />
 
+      {/* Tombol Navigasi Scroll Atas & Bawah (Pengganti Scrollbar) */}
+      {hasEntered && (canScrollUp || canScrollDown) && (
+        <div className="fixed right-3 md:right-8 top-1/2 -translate-y-1/2 z-[9998] flex flex-col gap-2.5 items-center">
+          <button
+            onClick={handleScrollUp}
+            disabled={!canScrollUp}
+            id="btn-scroll-up"
+            className="w-9 h-9 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-white/25 active:scale-90 transition-all shadow-lg cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white/10"
+            title="Scroll Ke Atas"
+          >
+            <ChevronUp className="w-5 h-5" />
+          </button>
+          <button
+            onClick={handleScrollDown}
+            disabled={!canScrollDown}
+            id="btn-scroll-down"
+            className={`w-9 h-9 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-white/25 active:scale-90 transition-all shadow-lg cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:bg-white/10 ${
+              canScrollDown ? 'animate-bounce' : ''
+            }`}
+            style={{ animationDuration: '2.5s' }}
+            title="Scroll Ke Bawah (Lihat Tombol/Konten Lainnya)"
+          >
+            <ChevronDown className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
       {/* Kontainer Profil */}
       <motion.div 
+        ref={contentScrollRef}
         animate={{ opacity: hasEntered ? 1 : 0, scale: hasEntered ? 1 : 0.95 }}
         initial={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-        className="w-full max-w-md my-auto space-y-8 py-6 z-20 overflow-y-auto max-h-[82vh] scrollable-content no-scrollbar pr-0.5"
+        className="w-full max-w-md my-auto space-y-8 py-6 z-20 overflow-y-auto max-h-[82vh] scrollable-content main-page-no-scrollbar pr-0.5"
       >
         <div className="flex flex-col items-center text-center space-y-5">
           <motion.div 
