@@ -16,4 +16,15 @@ a, button, [role="button"] {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Sembunyikan scrollbar di semua browser (desktop & mobile) tanpa mengganggu fungsi scroll */
+html, body, * {
+  -ms-overflow-style: none;  /* IE dan Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, dan Opera */
+  width: 0;
+  height: 0;
+}
 
