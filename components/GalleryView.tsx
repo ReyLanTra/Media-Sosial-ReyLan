@@ -55,12 +55,21 @@ export default function GalleryView({
     return () => window.removeEventListener('click', triggerAudio);
   }, []);
 
+  // Sort items: newest taken_at at the top, oldest at the bottom
+  const sortedItems = React.useMemo(() => {
+    return [...galleryItems].sort((a, b) => {
+      const timeA = a.taken_at ? new Date(a.taken_at).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+      const timeB = b.taken_at ? new Date(b.taken_at).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
+  }, [galleryItems]);
+
   // Filter items
   const filteredItems = React.useMemo(() => {
-    if (filter === 'image') return galleryItems.filter((item) => item.media_type === 'image');
-    if (filter === 'video') return galleryItems.filter((item) => item.media_type === 'video');
-    return galleryItems;
-  }, [galleryItems, filter]);
+    if (filter === 'image') return sortedItems.filter((item) => item.media_type === 'image');
+    if (filter === 'video') return sortedItems.filter((item) => item.media_type === 'video');
+    return sortedItems;
+  }, [sortedItems, filter]);
 
   const activeItem = selectedIndex !== null ? filteredItems[selectedIndex] : null;
 

@@ -799,25 +799,35 @@ export const deleteAnnouncement = async (id: string): Promise<boolean> => {
 // --- GALLERY ACTIONS ---
 
 export const getGalleryItems = async (): Promise<GalleryItem[]> => {
+  let items: GalleryItem[] = [];
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabasePublic();
       const { data, error } = await supabase
         .from('gallery_items')
         .select('*')
-        .order('taken_at', { ascending: false });
+        .order('taken_at', { ascending: false, nullsFirst: false });
 
       if (error) {
         console.warn('Supabase get gallery items error (mungkin tabel belum dibuat):', error.message);
-        return readLocalDb().gallery_items || [];
+        items = readLocalDb().gallery_items || [];
+      } else {
+        items = (data as GalleryItem[]) || [];
       }
-      return (data as GalleryItem[]) || [];
     } catch (err: any) {
       console.error('Supabase error on get gallery items:', err?.message);
-      return readLocalDb().gallery_items || [];
+      items = readLocalDb().gallery_items || [];
     }
+  } else {
+    items = readLocalDb().gallery_items || [];
   }
-  return readLocalDb().gallery_items || [];
+
+  // Urutkan: Waktu pengambilan paling baru (terbaru) berada paling atas, usia paling tua (lama) berada paling bawah
+  return [...items].sort((a, b) => {
+    const timeA = a.taken_at ? new Date(a.taken_at).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+    const timeB = b.taken_at ? new Date(b.taken_at).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+    return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+  });
 };
 
 export const addGalleryItem = async (data: Omit<GalleryItem, 'id'>): Promise<GalleryItem> => {

@@ -69,6 +69,15 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
 
   const [statusMessage, setStatusMessage] = React.useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Urutkan item: Waktu pengambilan paling baru di paling atas, paling lama di paling bawah
+  const sortedItems = React.useMemo(() => {
+    return [...items].sort((a, b) => {
+      const timeA = a.taken_at ? new Date(a.taken_at).getTime() : (a.created_at ? new Date(a.created_at).getTime() : 0);
+      const timeB = b.taken_at ? new Date(b.taken_at).getTime() : (b.created_at ? new Date(b.created_at).getTime() : 0);
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    });
+  }, [items]);
+
   // Clean up Object URLs when component unmounts
   React.useEffect(() => {
     return () => {
@@ -729,7 +738,7 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
           </h2>
         </div>
 
-        {items.length === 0 ? (
+        {sortedItems.length === 0 ? (
           <div className="p-10 rounded-3xl border border-white/10 bg-slate-900/30 text-center space-y-3">
             <Images className="w-10 h-10 mx-auto text-slate-600" />
             <p className="text-sm font-semibold text-slate-400">Belum Ada Item di Galeri</p>
@@ -737,7 +746,7 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {items.map((item) => (
+            {sortedItems.map((item) => (
               <div
                 key={item.id}
                 className="group relative rounded-2xl border border-white/10 bg-slate-900/60 overflow-hidden flex flex-col justify-between hover:border-blue-500/40 transition-all duration-300 shadow-xl"
