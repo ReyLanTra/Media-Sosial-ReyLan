@@ -18,11 +18,28 @@ import {
   Loader2,
   X,
   Layers,
-  Pencil
+  Pencil,
+  KeyRound,
+  Copy,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  Shuffle,
+  CalendarClock,
+  AlertTriangle,
+  Check
 } from 'lucide-react';
-import { GalleryItem } from '@/lib/db';
+import { GalleryItem, GalleryPassword } from '@/lib/db';
 import { handleUpload } from '@/lib/supabase';
-import { createGalleryMedia, removeGalleryMedia, editGalleryMedia } from '@/app/actions';
+import { 
+  createGalleryMedia, 
+  removeGalleryMedia, 
+  editGalleryMedia,
+  fetchGalleryPasswords,
+  addGalleryPassword,
+  editGalleryPassword,
+  removeGalleryPassword
+} from '@/app/actions';
 import ExifReader from 'exifreader';
 
 interface GallerySettingsClientProps {
@@ -75,6 +92,179 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
   const [editCaption, setEditCaption] = React.useState('');
   const [editTakenAt, setEditTakenAt] = React.useState('');
   const [isSavingEdit, setIsSavingEdit] = React.useState(false);
+
+  // Gallery Custom Passwords State
+  const [passwords, setPasswords] = React.useState<GalleryPassword[]>([]);
+  const [isLoadingPasswords, setIsLoadingPasswords] = React.useState(true);
+  const [showPassModal, setShowPassModal] = React.useState(false);
+  const [editingPassword, setEditingPassword] = React.useState<GalleryPassword | null>(null);
+  const [visiblePassIds, setVisiblePassIds] = React.useState<Record<string, boolean>>({});
+  const [copiedPassId, setCopiedPassId] = React.useState<string | null>(null);
+
+  // Password Modal Form State
+  const [passLabel, setPassLabel] = React.useState('');
+  const [passText, setPassText] = React.useState('');
+  const [passDurationType, setPassDurationType] = React.useState<'forever' | '1h' | '1d' | '7d' | '30d' | 'custom'>('forever');
+  const [passCustomExpiresAt, setPassCustomExpiresAt] = React.useState('');
+  const [passIsActive, setPassIsActive] = React.useState(true);
+  const [isSavingPass, setIsSavingPass] = React.useState(false);
+
+  // Load custom passwords on mount
+  React.useEffect(() => {
+    let mounted = true;
+    const loadPasses = async () => {
+      setIsLoadingPasswords(true);
+      try {
+        const res = await fetchGalleryPasswords();
+        if (mounted && res.success && res.data) {
+          setPasswords(res.data);
+        }
+      } catch (err) {
+        console.warn('Gagal memuat password galeri:', err);
+      } finally {
+        if (mounted) setIsLoadingPasswords(false);
+      }
+    };
+    loadPasses();
+    return () => { mounted = false; };
+  }, []);
+
+  // Random Password Generator
+  const generateRandomPassword = () => {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnopqrstuvwxyz';
+    const numbers = '23456789';
+    const symbols = '!@#$%^&*()_+-=';
+    const all = upper + lower + numbers + symbols;
+
+    let pass = [
+      upper[Math.floor(Math.random() * upper.length)],
+      lower[Math.floor(Math.random() * lower.length)],
+      numbers[Math.floor(Math.random() * numbers.length)],
+      symbols[Math.floor(Math.random() * symbols.length)],
+    ];
+
+    for (let i = pass.length; i < 12; i++) {
+      pass.push(all[Math.floor(Math.random() * all.length)]);
+    }
+
+    pass = pass.sort(() => Math.random() - 0.5);
+    setPassText(pass.join(''));
+  };
+
+  const calculateExpiresAt = (): string | null => {
+    if (passDurationType === 'forever') return null;
+    const now = new Date();
+    if (passDurationType === '1h') now.setHours(now.getHours() + 1);
+    else if (passDurationType === '1d') now.setDate(now.getDate() + 1);
+    else if (passDurationType === '7d') now.setDate(now.getDate() + 7);
+    else if (passDurationType === '30d') now.setDate(now.getDate() + 30);
+    else if (passDurationType === 'custom') {
+      if (!passCustomExpiresAt) return null;
+      const parsed = new Date(passCustomExpiresAt);
+      return isNaN(parsed.getTime()) ? null : parsed.toISOString();
+    }
+    return now.toISOString();
+  };
+
+  const handleOpenAddPassModal = () => {
+    setEditingPassword(null);
+    setPassLabel('');
+    generateRandomPassword();
+    setPassDurationType('forever');
+    setPassCustomExpiresAt('');
+    setPassIsActive(true);
+    setShowPassModal(true);
+  };
+
+  const handleOpenEditPassModal = (pass: GalleryPassword) => {
+    setEditingPassword(pass);
+    setPassLabel(pass.label || '');
+    setPassText(pass.password_text || '');
+    if (!pass.expires_at) {
+      setPassDurationType('forever');
+      setPassCustomExpiresAt('');
+    } else {
+      setPassDurationType('custom');
+      setPassCustomExpiresAt(formatForDateTimeInput(pass.expires_at));
+    }
+    setPassIsActive(pass.is_active ?? true);
+    setShowPassModal(true);
+  };
+
+  const handleSavePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passText.trim() || passText.length < 8 || passText.length > 16) {
+      setStatusMessage({ type: 'error', text: 'Password harus terdiri dari 8 hingga 16 karakter.' });
+      return;
+    }
+
+    setIsSavingPass(true);
+    setStatusMessage(null);
+
+    const expIso = calculateExpiresAt();
+
+    try {
+      if (editingPassword) {
+        const res = await editGalleryPassword(editingPassword.id, {
+          label: passLabel.trim() || 'Password Galeri',
+          password_text: passText.trim(),
+          expires_at: expIso,
+          is_active: passIsActive,
+        });
+        if (res.success && res.data) {
+          setPasswords((prev) => prev.map((p) => (p.id === editingPassword.id ? res.data! : p)));
+          setStatusMessage({ type: 'success', text: 'Password custom berhasil diperbarui!' });
+          setShowPassModal(false);
+        } else {
+          setStatusMessage({ type: 'error', text: res.error || 'Gagal menyimpan password.' });
+        }
+      } else {
+        const res = await addGalleryPassword({
+          label: passLabel.trim() || 'Password Galeri Custom',
+          password_text: passText.trim(),
+          expires_at: expIso,
+          is_active: passIsActive,
+        });
+        if (res.success && res.data) {
+          setPasswords((prev) => [res.data!, ...prev]);
+          setStatusMessage({ type: 'success', text: 'Password custom baru berhasil dibuat!' });
+          setShowPassModal(false);
+        } else {
+          setStatusMessage({ type: 'error', text: res.error || 'Gagal membuat password.' });
+        }
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err?.message || 'Terjadi kesalahan sistem.' });
+    } finally {
+      setIsSavingPass(false);
+    }
+  };
+
+  const handleDeletePassword = async (id: string) => {
+    if (!window.confirm('Apakah Anda yakin ingin menghapus password custom ini?')) return;
+    try {
+      const res = await removeGalleryPassword(id);
+      if (res.success) {
+        setPasswords((prev) => prev.filter((p) => p.id !== id));
+        setStatusMessage({ type: 'success', text: 'Password custom berhasil dihapus.' });
+      } else {
+        setStatusMessage({ type: 'error', text: res.error || 'Gagal menghapus password.' });
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err?.message || 'Terjadi kesalahan saat menghapus.' });
+    }
+  };
+
+  const handleCopyPassword = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedPassId(id);
+    setTimeout(() => setCopiedPassId(null), 2000);
+  };
+
+  const togglePassVisibility = (id: string) => {
+    setVisiblePassIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   const formatForDateTimeInput = (dateString?: string) => {
     if (!dateString) return getDefaultDateTime();
@@ -780,6 +970,166 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
         </button>
       </form>
 
+      {/* Pengaturan Password Akses Galeri Custom */}
+      <div className="p-6 rounded-3xl border border-white/10 bg-slate-900/50 backdrop-blur-xl space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-amber-400" />
+              <h2 className="text-base font-bold text-white">Password Akses Halaman Galeri</h2>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Buat banyak password custom dengan pengaturan masa aktif (1 Jam, 1 Hari, 7 Hari, 30 Hari, atau Selamanya) untuk membatasi akses ke halaman <code className="text-blue-300 font-mono">/gallery</code>.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleOpenAddPassModal}
+            className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 active:scale-[0.99] text-slate-950 font-bold text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 shrink-0 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Buat Password Custom</span>
+          </button>
+        </div>
+
+        {/* Note about default password */}
+        <div className="p-3.5 rounded-2xl border border-blue-500/20 bg-blue-500/10 text-xs text-blue-200 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0" />
+            <span>
+              <strong>Password Default Utama:</strong> Menggunakan password admin aplikasi (sesuai file lingkungan <code className="font-mono text-white">ADMIN_PASSWORD</code>).
+            </span>
+          </div>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+            Selalu Aktif
+          </span>
+        </div>
+
+        {/* List Password Custom */}
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+            Daftar Password Custom ({passwords.length})
+          </h3>
+
+          {isLoadingPasswords ? (
+            <div className="p-6 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+              <span>Memuat daftar password...</span>
+            </div>
+          ) : passwords.length === 0 ? (
+            <div className="p-6 rounded-2xl border border-dashed border-white/10 text-center text-xs text-slate-500 space-y-1">
+              <p>Belum ada password custom. Klik &quot;Buat Password Custom&quot; di atas jika Anda ingin membagikan akses galeri secara khusus dengan batas waktu.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {passwords.map((pass) => {
+                const isVisible = visiblePassIds[pass.id];
+                const isCopied = copiedPassId === pass.id;
+                
+                // Status Expired check
+                let isExpired = false;
+                if (pass.expires_at) {
+                  const exp = new Date(pass.expires_at);
+                  if (!isNaN(exp.getTime()) && exp < new Date()) {
+                    isExpired = true;
+                  }
+                }
+
+                return (
+                  <div
+                    key={pass.id}
+                    className={`p-4 rounded-2xl border flex flex-col justify-between gap-3 transition-all ${
+                      !pass.is_active || isExpired
+                        ? 'border-white/5 bg-slate-950/40 opacity-70'
+                        : 'border-white/10 bg-slate-950/70 hover:border-amber-500/30'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5 min-w-0">
+                        <p className="text-xs font-bold text-white truncate">{pass.label}</p>
+                        
+                        {/* Status Badge */}
+                        <div className="flex items-center gap-2 pt-0.5">
+                          {!pass.is_active ? (
+                            <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                              Nonaktif
+                            </span>
+                          ) : isExpired ? (
+                            <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
+                              Kadaluarsa
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              Aktif
+                            </span>
+                          )}
+
+                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                            <CalendarClock className="w-3 h-3 text-slate-400" />
+                            {pass.expires_at ? (
+                              isExpired ? (
+                                <span className="text-red-400">Telah Berakhir</span>
+                              ) : (
+                                <span>Berakhir: {new Date(pass.expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                              )
+                            ) : (
+                              <span className="text-amber-300 font-medium">Selamanya</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditPassModal(pass)}
+                          className="p-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white transition-all"
+                          title="Edit Password"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePassword(pass.id)}
+                          className="p-1.5 rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all"
+                          title="Hapus Password"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Password Box */}
+                    <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-white/10 bg-slate-900 font-mono text-xs text-amber-300">
+                      <span>{isVisible ? pass.password_text : '••••••••••••'}</span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => togglePassVisibility(pass.id)}
+                          className="p-1 text-slate-400 hover:text-white"
+                          title={isVisible ? 'Sembunyikan' : 'Tampilkan'}
+                        >
+                          {isVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyPassword(pass.id, pass.password_text)}
+                          className="p-1 text-slate-400 hover:text-amber-400"
+                          title="Salin Password"
+                        >
+                          {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* List Item Galeri Terunggah */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -989,6 +1339,145 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
                     <>
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Simpan Perubahan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tambah / Edit Password Custom */}
+      {showPassModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <KeyRound className="w-4 h-4 text-amber-400" />
+                <span>{editingPassword ? 'Edit Password Custom' : 'Buat Password Custom Baru'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPassModal(false)}
+                className="p-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePassword} className="space-y-4">
+              {/* Label */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">Label / Catatan Password</label>
+                <input
+                  type="text"
+                  value={passLabel}
+                  onChange={(e) => setPassLabel(e.target.value)}
+                  placeholder="Misal: Password untuk Teman SMA"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Password Text + Randomizer */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300 block">
+                    Password (8 - 16 Digit) <span className="text-red-400">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={generateRandomPassword}
+                    className="text-[10px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline"
+                  >
+                    <Shuffle className="w-3 h-3" />
+                    <span>Acak Password</span>
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  required
+                  minLength={8}
+                  maxLength={16}
+                  value={passText}
+                  onChange={(e) => setPassText(e.target.value)}
+                  placeholder="Contoh: K3naNg4n@2026"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-slate-950 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Password acak otomatis mengombinasikan huruf besar, huruf kecil, angka, dan simbol (8-16 digit).
+                </p>
+              </div>
+
+              {/* Duration / Expiry Setting */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">Masa Aktif Password</label>
+                <select
+                  value={passDurationType}
+                  onChange={(e) => setPassDurationType(e.target.value as any)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-amber-500"
+                >
+                  <option value="forever">Selamanya (Tidak Ada Kadaluarsa)</option>
+                  <option value="1h">1 Jam dari Sekarang</option>
+                  <option value="1d">1 Hari dari Sekarang</option>
+                  <option value="7d">7 Hari dari Sekarang</option>
+                  <option value="30d">30 Hari dari Sekarang</option>
+                  <option value="custom">Custom Tanggal & Jam</option>
+                </select>
+              </div>
+
+              {/* Custom Date Time Picker if selected */}
+              {passDurationType === 'custom' && (
+                <div className="space-y-1.5 pl-2 border-l-2 border-amber-500">
+                  <label className="text-xs font-semibold text-slate-300 block">Tanggal & Jam Kadaluarsa</label>
+                  <input
+                    type="datetime-local"
+                    value={passCustomExpiresAt}
+                    onChange={(e) => setPassCustomExpiresAt(e.target.value)}
+                    required={passDurationType === 'custom'}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              )}
+
+              {/* Status Toggle */}
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-xs font-semibold text-slate-300">Status Password</span>
+                <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={passIsActive}
+                    onChange={(e) => setPassIsActive(e.target.checked)}
+                    className="accent-amber-500 w-4 h-4 rounded"
+                  />
+                  <span>{passIsActive ? 'Aktif' : 'Nonaktif'}</span>
+                </label>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowPassModal(false)}
+                  disabled={isSavingPass}
+                  className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-medium text-slate-300 transition-all disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingPass}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-slate-950 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
+                >
+                  {isSavingPass ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Simpan Password</span>
                     </>
                   )}
                 </button>

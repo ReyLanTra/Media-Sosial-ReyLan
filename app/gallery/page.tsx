@@ -17,11 +17,21 @@ export async function generateMetadata(): Promise<Metadata> {
     return {
       title: `Galeri Foto & Video - ${settings.account_name}`,
       description: `Koleksi foto dan video kenangan resmi ${settings.account_name}.`,
+      metadataBase: new URL(appUrl),
       openGraph: {
         title: `Galeri Foto & Video - ${settings.account_name}`,
         description: `Koleksi foto dan video kenangan resmi ${settings.account_name}.`,
         url: `${appUrl}gallery`,
+        siteName: settings.account_name,
+        type: 'website',
       },
+      icons: settings.favicon_url 
+        ? [
+            { rel: 'icon', url: settings.favicon_url },
+            { rel: 'shortcut icon', url: settings.favicon_url },
+            { rel: 'apple-touch-icon', url: settings.favicon_url }
+          ] 
+        : [{ rel: 'icon', url: '/favicon.ico' }],
     };
   } catch (e) {
     return {

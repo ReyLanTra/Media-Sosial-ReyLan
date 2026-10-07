@@ -28,12 +28,18 @@ import {
   addGalleryItem,
   updateGalleryItem,
   deleteGalleryItem,
+  getGalleryPasswords,
+  createGalleryPassword,
+  updateGalleryPassword,
+  deleteGalleryPassword,
+  verifyGalleryPassword,
   SiteSettings,
   SocialButton,
   BackgroundImage,
   MusicTrack,
   Announcement,
   GalleryItem,
+  GalleryPassword,
   PushSubscriptionData,
   getStatusConfig,
 } from '@/lib/db';
@@ -512,6 +518,84 @@ export async function editGalleryMedia(id: string, updates: Partial<Omit<Gallery
   } catch (err: any) {
     console.error('Error in editGalleryMedia:', err);
     return { success: false, error: err?.message || 'Gagal memperbarui item galeri.' };
+  }
+}
+
+// --- GALLERY PASSWORD ACTIONS ---
+
+export async function fetchGalleryPasswords() {
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+
+    const list = await getGalleryPasswords();
+    return { success: true, data: list };
+  } catch (err: any) {
+    console.error('Error in fetchGalleryPasswords:', err);
+    return { success: false, error: err?.message || 'Gagal mengambil daftar password galeri.' };
+  }
+}
+
+export async function addGalleryPassword(data: Omit<GalleryPassword, 'id' | 'created_at' | 'updated_at'>) {
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+
+    if (!data.password_text || data.password_text.length < 8 || data.password_text.length > 16) {
+      return { success: false, error: 'Password harus terdiri dari 8 hingga 16 karakter.' };
+    }
+
+    const created = await createGalleryPassword(data);
+    revalidatePath('/gallery');
+    revalidatePath('/settings/galeri');
+    return { success: true, data: created };
+  } catch (err: any) {
+    console.error('Error in addGalleryPassword:', err);
+    return { success: false, error: err?.message || 'Gagal membuat password galeri baru.' };
+  }
+}
+
+export async function editGalleryPassword(id: string, updates: Partial<Omit<GalleryPassword, 'id'>>) {
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+
+    if (updates.password_text && (updates.password_text.length < 8 || updates.password_text.length > 16)) {
+      return { success: false, error: 'Password harus terdiri dari 8 hingga 16 karakter.' };
+    }
+
+    const updated = await updateGalleryPassword(id, updates);
+    revalidatePath('/gallery');
+    revalidatePath('/settings/galeri');
+    return { success: true, data: updated };
+  } catch (err: any) {
+    console.error('Error in editGalleryPassword:', err);
+    return { success: false, error: err?.message || 'Gagal memperbarui password galeri.' };
+  }
+}
+
+export async function removeGalleryPassword(id: string) {
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+
+    const success = await deleteGalleryPassword(id);
+    revalidatePath('/gallery');
+    revalidatePath('/settings/galeri');
+    return { success: true, data: success };
+  } catch (err: any) {
+    console.error('Error in removeGalleryPassword:', err);
+    return { success: false, error: err?.message || 'Gagal menghapus password galeri.' };
+  }
+}
+
+export async function checkGalleryAccessPassword(password: string) {
+  try {
+    const isValid = await verifyGalleryPassword(password);
+    return { success: isValid };
+  } catch (err: any) {
+    console.error('Error in checkGalleryAccessPassword:', err);
+    return { success: false, error: 'Terjadi kesalahan saat memeriksa password.' };
   }
 }
 

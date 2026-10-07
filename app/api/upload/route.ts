@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { uploadFileToStorage } from '@/lib/db';
 import { isAuthenticated } from '@/lib/auth';
 
+export const maxDuration = 60;
+
 export async function POST(req: NextRequest) {
   try {
     // 1. Validasi Autentikasi Admin

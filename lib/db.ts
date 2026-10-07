@@ -120,6 +120,16 @@ export interface GalleryItem {
   updated_at?: string;
 }
 
+export interface GalleryPassword {
+  id: string;
+  label: string;
+  password_text: string;
+  expires_at: string | null; // ISO Date String or null for forever
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 // Cek ketersediaan variabel lingkungan Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -274,6 +284,7 @@ interface LocalDbSchema {
   site_settings: SiteSettings;
   social_buttons: SocialButton[];
   gallery_items?: GalleryItem[];
+  gallery_passwords?: GalleryPassword[];
 }
 
 let inMemoryDb: LocalDbSchema | null = null;
@@ -285,6 +296,7 @@ const readLocalDb = (): LocalDbSchema => {
       const data = fs.readFileSync(DB_FILE, 'utf-8');
       const parsed = JSON.parse(data);
       if (!parsed.gallery_items) parsed.gallery_items = [];
+      if (!parsed.gallery_passwords) parsed.gallery_passwords = [];
       return parsed;
     }
   } catch (error) {
@@ -296,6 +308,7 @@ const readLocalDb = (): LocalDbSchema => {
       site_settings: DEFAULT_SETTINGS,
       social_buttons: DEFAULT_BUTTONS,
       gallery_items: [],
+      gallery_passwords: [],
     };
   }
   return inMemoryDb;
@@ -966,6 +979,207 @@ export const updateGalleryItem = async (id: string, updates: Partial<Omit<Galler
   }
 };
 
+// --- GALLERY PASSWORD ACTIONS ---
+
+export const getGalleryPasswords = async (): Promise<GalleryPassword[]> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('gallery_passwords')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.warn('Supabase get gallery passwords error:', error.message);
+        return readLocalDb().gallery_passwords || [];
+      }
+      return (data as GalleryPassword[]) || [];
+    } catch (err) {
+      console.error('Supabase error on get gallery passwords, fallback to local:', err);
+      return readLocalDb().gallery_passwords || [];
+    }
+  } else {
+    return readLocalDb().gallery_passwords || [];
+  }
+};
+
+export const createGalleryPassword = async (
+  item: Omit<GalleryPassword, 'id' | 'created_at' | 'updated_at'>
+): Promise<GalleryPassword> => {
+  const newPass: GalleryPassword = {
+    id: crypto.randomUUID(),
+    label: item.label,
+    password_text: item.password_text,
+    expires_at: item.expires_at || null,
+    is_active: item.is_active ?? true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('gallery_passwords')
+        .insert([newPass])
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('Supabase insert gallery password error, fallback to local:', error.message);
+        const db = readLocalDb();
+        if (!db.gallery_passwords) db.gallery_passwords = [];
+        db.gallery_passwords.unshift(newPass);
+        writeLocalDb(db);
+        return newPass;
+      }
+      return data as GalleryPassword;
+    } catch (err) {
+      console.error('Supabase error on insert gallery password, fallback to local:', err);
+      const db = readLocalDb();
+      if (!db.gallery_passwords) db.gallery_passwords = [];
+      db.gallery_passwords.unshift(newPass);
+      writeLocalDb(db);
+      return newPass;
+    }
+  } else {
+    const db = readLocalDb();
+    if (!db.gallery_passwords) db.gallery_passwords = [];
+    db.gallery_passwords.unshift(newPass);
+    writeLocalDb(db);
+    return newPass;
+  }
+};
+
+export const updateGalleryPassword = async (
+  id: string,
+  updates: Partial<Omit<GalleryPassword, 'id'>>
+): Promise<GalleryPassword | null> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('gallery_passwords')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('Supabase update gallery password error, fallback to local:', error.message);
+        const db = readLocalDb();
+        if (db.gallery_passwords) {
+          const idx = db.gallery_passwords.findIndex(g => g.id === id);
+          if (idx !== -1) {
+            db.gallery_passwords[idx] = { ...db.gallery_passwords[idx], ...updates };
+            writeLocalDb(db);
+            return db.gallery_passwords[idx];
+          }
+        }
+        return null;
+      }
+      return data as GalleryPassword;
+    } catch (err) {
+      console.error('Supabase error on update gallery password, fallback to local:', err);
+      const db = readLocalDb();
+      if (db.gallery_passwords) {
+        const idx = db.gallery_passwords.findIndex(g => g.id === id);
+        if (idx !== -1) {
+          db.gallery_passwords[idx] = { ...db.gallery_passwords[idx], ...updates };
+          writeLocalDb(db);
+          return db.gallery_passwords[idx];
+        }
+      }
+      return null;
+    }
+  } else {
+    const db = readLocalDb();
+    if (db.gallery_passwords) {
+      const idx = db.gallery_passwords.findIndex(g => g.id === id);
+      if (idx !== -1) {
+        db.gallery_passwords[idx] = { ...db.gallery_passwords[idx], ...updates };
+        writeLocalDb(db);
+        return db.gallery_passwords[idx];
+      }
+    }
+    return null;
+  }
+};
+
+export const deleteGalleryPassword = async (id: string): Promise<boolean> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase
+        .from('gallery_passwords')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.warn('Supabase delete gallery password error, fallback to local:', error.message);
+        const db = readLocalDb();
+        if (db.gallery_passwords) {
+          db.gallery_passwords = db.gallery_passwords.filter(g => g.id !== id);
+          writeLocalDb(db);
+          return true;
+        }
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error('Supabase error on delete gallery password, fallback to local:', err);
+      const db = readLocalDb();
+      if (db.gallery_passwords) {
+        db.gallery_passwords = db.gallery_passwords.filter(g => g.id !== id);
+        writeLocalDb(db);
+        return true;
+      }
+      return false;
+    }
+  } else {
+    const db = readLocalDb();
+    if (db.gallery_passwords) {
+      db.gallery_passwords = db.gallery_passwords.filter(g => g.id !== id);
+      writeLocalDb(db);
+      return true;
+    }
+    return false;
+  }
+};
+
+export const verifyGalleryPassword = async (inputPass: string): Promise<boolean> => {
+  if (!inputPass) return false;
+  const trimmed = inputPass.trim();
+
+  // 1. Cek default admin password dari ENV
+  let envPass = process.env.ADMIN_PASSWORD || 'admin123';
+  envPass = envPass.trim().replace(/^['"]|['"]$/g, '');
+  if (trimmed === envPass) return true;
+
+  // 2. Cek custom gallery passwords
+  const customPasswords = await getGalleryPasswords();
+  const now = new Date();
+
+  for (const passObj of customPasswords) {
+    if (!passObj.is_active) continue;
+    if (passObj.expires_at) {
+      const exp = new Date(passObj.expires_at);
+      if (!isNaN(exp.getTime()) && exp < now) {
+        continue; // Kadaluarsa
+      }
+    }
+    if (passObj.password_text.trim() === trimmed) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
 // --- PUSH SUBSCRIPTIONS ACTIONS ---
 
 export const savePushSubscription = async (data: PushSubscriptionData): Promise<PushSubscriptionData> => {
@@ -1152,10 +1366,13 @@ export const uploadFileToStorage = async (
     const { data: buckets } = await supabase.storage.listBuckets();
     const exists = buckets?.some(b => b.name === bucketName);
     if (!exists) {
-      await supabase.storage.createBucket(bucketName, { public: true });
+      await supabase.storage.createBucket(bucketName, { public: true, fileSizeLimit: 52428800 });
+    } else {
+      // Pastikan bucket yang sudah ada mendukung file hingga 50MB
+      await supabase.storage.updateBucket(bucketName, { public: true, fileSizeLimit: 52428800 });
     }
   } catch (bucketErr) {
-    console.warn(`Gagal memeriksa/membuat bucket "${bucketName}":`, bucketErr);
+    console.warn(`Gagal memeriksa/membuat/memperbarui bucket "${bucketName}":`, bucketErr);
   }
 
   // Hapus file lama di bucket ini jika ada, agar tidak menumpuk
