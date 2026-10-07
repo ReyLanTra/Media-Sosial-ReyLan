@@ -34,6 +34,7 @@ import { SiteSettings, BackgroundImage, MusicTrack, GalleryItem } from '@/lib/db
 import { checkGalleryAccessPassword } from '@/app/actions';
 import BackgroundMedia from './BackgroundMedia';
 import AudioPlayer from './AudioPlayer';
+import SecurityGuard from './SecurityGuard';
 
 interface GalleryViewProps {
   settings: SiteSettings;
@@ -266,6 +267,8 @@ export default function GalleryView({
 
   return (
     <div className="relative min-h-screen text-white font-sans overflow-x-hidden">
+      {/* Pengaman Keamanan Situs dengan Notifikasi Toast */}
+      <SecurityGuard settings={settings} />
       {/* Dynamic Main Page Background (Non-zoomed, non-scrolling) */}
       <BackgroundMedia
         url={settings.background_url}

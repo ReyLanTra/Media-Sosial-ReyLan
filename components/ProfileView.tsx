@@ -13,6 +13,7 @@ import AccessDenied from './AccessDenied';
 import AnnouncementCard from './AnnouncementCard';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import PhotoLightbox from './PhotoLightbox';
+import SecurityGuard from './SecurityGuard';
 
 interface ProfileViewProps {
   settings: SiteSettings;
@@ -373,6 +374,8 @@ export default function ProfileView({
     <div className={`fixed inset-0 h-screen w-screen overflow-hidden flex flex-col items-center justify-between p-6 text-white font-sans transition-all duration-300 main-page-no-scrollbar ${
       settings.disable_scroll ? 'touch-none' : ''
     }`}>
+      {/* Pengaman Keamanan Situs dengan Notifikasi Toast */}
+      <SecurityGuard settings={settings} />
       {/* Dynamic Style Injector */}
       <style dangerouslySetInnerHTML={{ __html: `
         ${settings.disable_text_select ? `

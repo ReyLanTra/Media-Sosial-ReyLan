@@ -54,6 +54,8 @@ export default function KeamananClient({ initialSettings }: KeamananClientProps)
       disable_text_select: currentData.disable_text_select,
       disable_pull_refresh: currentData.disable_pull_refresh,
       disable_link_preview: currentData.disable_link_preview,
+      disable_right_click: currentData.disable_right_click,
+      disable_inspect: currentData.disable_inspect,
       allow_desktop_access: currentData.allow_desktop_access,
       allow_mobile_access: currentData.allow_mobile_access,
     });
@@ -337,6 +339,36 @@ export default function KeamananClient({ initialSettings }: KeamananClientProps)
                 checked={!!settings.disable_link_preview}
                 onChange={(e) => updateData(prev => ({ ...prev, disable_link_preview: e.target.checked }))}
                 className="w-4 h-4 rounded accent-settings-accent cursor-pointer shrink-0"
+              />
+            </div>
+
+            <div className="h-px bg-white/5 my-2"></div>
+
+            {/* Toggle Anti Klik Kanan Global */}
+            <div className="flex items-center justify-between p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+              <div className="space-y-0.5">
+                <span className="text-xs font-semibold text-amber-200">Anti Klik Kanan Global (Disable Context Menu)</span>
+                <p className="text-[10px] text-amber-300/70">Menonaktifkan klik kanan di seluruh area halaman utama & galeri</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={!!settings.disable_right_click}
+                onChange={(e) => updateData(prev => ({ ...prev, disable_right_click: e.target.checked }))}
+                className="w-4 h-4 rounded accent-amber-500 cursor-pointer shrink-0"
+              />
+            </div>
+
+            {/* Toggle Anti Inspeksi / DevTools */}
+            <div className="flex items-center justify-between p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+              <div className="space-y-0.5">
+                <span className="text-xs font-semibold text-amber-200">Anti Inspeksi Website (Block F12 & Shortcut DevTools)</span>
+                <p className="text-[10px] text-amber-300/70">Mencegah pembukaan DevTools via F12, Ctrl+Shift+I/J/C, Ctrl+U, Cmd+Opt+I/J/C</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={!!settings.disable_inspect}
+                onChange={(e) => updateData(prev => ({ ...prev, disable_inspect: e.target.checked }))}
+                className="w-4 h-4 rounded accent-amber-500 cursor-pointer shrink-0"
               />
             </div>
           </div>

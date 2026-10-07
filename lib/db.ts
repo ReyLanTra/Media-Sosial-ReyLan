@@ -42,6 +42,8 @@ export interface SiteSettings {
   disable_text_select?: boolean;
   disable_pull_refresh?: boolean;
   disable_link_preview?: boolean;
+  disable_right_click?: boolean;
+  disable_inspect?: boolean;
   selection_bg_color?: string;
   selection_text_color?: string;
   allow_desktop_access: boolean;
@@ -233,6 +235,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   disable_text_select: false,
   disable_pull_refresh: false,
   disable_link_preview: false,
+  disable_right_click: false,
+  disable_inspect: false,
   selection_bg_color: '#3b82f6',
   selection_text_color: '#ffffff',
   allow_desktop_access: true,
