@@ -18,7 +18,8 @@ import {
   X, 
   Paintbrush,
   Megaphone,
-  Bell
+  Bell,
+  Images
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { login, logout } from '@/app/actions';
@@ -137,6 +138,7 @@ export default function SettingsLayoutClient({
     { name: 'Profil & Konten', icon: User, path: '/settings/profil-konten' },
     { name: 'Tombol Medsos', icon: LinkIcon, path: '/settings/tombol-medsos' },
     { name: 'Latar & Musik', icon: Sliders, path: '/settings/latar-musik' },
+    { name: 'Galeri Foto & Video', icon: Images, path: '/settings/galeri' },
     { name: 'Pengumuman', icon: Megaphone, path: '/settings/pengumuman' },
     { name: 'Push Notifikasi', icon: Bell, path: '/settings/notifikasi' },
     { name: 'Optimasi SEO (OG)', icon: Share2, path: '/settings/optimasi-seo' },

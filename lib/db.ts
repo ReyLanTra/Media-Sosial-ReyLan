@@ -110,6 +110,16 @@ export interface SocialButton {
   updated_at?: string;
 }
 
+export interface GalleryItem {
+  id: string;
+  media_url: string;
+  media_type: 'image' | 'video';
+  caption: string;
+  taken_at: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 // Cek ketersediaan variabel lingkungan Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -263,6 +273,7 @@ const DEFAULT_BUTTONS: SocialButton[] = [
 interface LocalDbSchema {
   site_settings: SiteSettings;
   social_buttons: SocialButton[];
+  gallery_items?: GalleryItem[];
 }
 
 let inMemoryDb: LocalDbSchema | null = null;
@@ -272,7 +283,9 @@ const readLocalDb = (): LocalDbSchema => {
     ensureLocalDirs();
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, 'utf-8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (!parsed.gallery_items) parsed.gallery_items = [];
+      return parsed;
     }
   } catch (error) {
     console.warn('Gagal membaca database lokal dari disk, menggunakan memori:', error);
@@ -282,6 +295,7 @@ const readLocalDb = (): LocalDbSchema => {
     inMemoryDb = {
       site_settings: DEFAULT_SETTINGS,
       social_buttons: DEFAULT_BUTTONS,
+      gallery_items: [],
     };
   }
   return inMemoryDb;
@@ -782,6 +796,106 @@ export const deleteAnnouncement = async (id: string): Promise<boolean> => {
   return false;
 };
 
+// --- GALLERY ACTIONS ---
+
+export const getGalleryItems = async (): Promise<GalleryItem[]> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabasePublic();
+      const { data, error } = await supabase
+        .from('gallery_items')
+        .select('*')
+        .order('taken_at', { ascending: false });
+
+      if (error) {
+        console.warn('Supabase get gallery items error (mungkin tabel belum dibuat):', error.message);
+        return readLocalDb().gallery_items || [];
+      }
+      return (data as GalleryItem[]) || [];
+    } catch (err: any) {
+      console.error('Supabase error on get gallery items:', err?.message);
+      return readLocalDb().gallery_items || [];
+    }
+  }
+  return readLocalDb().gallery_items || [];
+};
+
+export const addGalleryItem = async (data: Omit<GalleryItem, 'id'>): Promise<GalleryItem> => {
+  const newId = crypto.randomUUID();
+  const newItem: GalleryItem = { ...data, id: newId };
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data: inserted, error } = await supabase
+        .from('gallery_items')
+        .insert([newItem])
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('Gagal memasukkan gallery item ke Supabase, fallback ke lokal:', error.message);
+        const db = readLocalDb();
+        if (!db.gallery_items) db.gallery_items = [];
+        db.gallery_items.unshift(newItem);
+        writeLocalDb(db);
+        return newItem;
+      }
+      return inserted as GalleryItem;
+    } catch (err) {
+      console.error('Supabase error on add gallery item:', err);
+      const db = readLocalDb();
+      if (!db.gallery_items) db.gallery_items = [];
+      db.gallery_items.unshift(newItem);
+      writeLocalDb(db);
+      return newItem;
+    }
+  } else {
+    const db = readLocalDb();
+    if (!db.gallery_items) db.gallery_items = [];
+    db.gallery_items.unshift(newItem);
+    writeLocalDb(db);
+    return newItem;
+  }
+};
+
+export const deleteGalleryItem = async (id: string): Promise<boolean> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { error } = await supabase
+        .from('gallery_items')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      const db = readLocalDb();
+      if (db.gallery_items) {
+        db.gallery_items = db.gallery_items.filter(g => g.id !== id);
+        writeLocalDb(db);
+      }
+      return true;
+    } catch (err) {
+      console.error('Supabase error on delete gallery item:', err);
+      const db = readLocalDb();
+      if (db.gallery_items) {
+        db.gallery_items = db.gallery_items.filter(g => g.id !== id);
+        writeLocalDb(db);
+        return true;
+      }
+      return false;
+    }
+  } else {
+    const db = readLocalDb();
+    if (db.gallery_items) {
+      db.gallery_items = db.gallery_items.filter(g => g.id !== id);
+      writeLocalDb(db);
+      return true;
+    }
+    return false;
+  }
+};
+
 // --- PUSH SUBSCRIPTIONS ACTIONS ---
 
 export const savePushSubscription = async (data: PushSubscriptionData): Promise<PushSubscriptionData> => {
@@ -942,6 +1056,9 @@ export const uploadFileToStorage = async (
     fileName = `push-large-image${ext}`;
   } else if (bucketName === 'push-badge') {
     fileName = `push-badge${ext}`;
+  } else if (bucketName === 'gallery') {
+    const id = customId || crypto.randomUUID();
+    fileName = `gallery-${id}${ext}`;
   } else {
     fileName = `${bucketName}-${Date.now()}${ext}`;
   }

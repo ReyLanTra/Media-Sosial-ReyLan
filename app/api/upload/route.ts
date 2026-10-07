@@ -26,6 +26,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Validasi batas ukuran file (Maksimal 50MB = 52.428.800 bytes)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { success: false, error: 'Ukuran file melebihi batas maksimal 50MB. Silakan kompres file Anda.' },
+        { status: 400 }
+      );
+    }
+
     // Convert file to Buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);

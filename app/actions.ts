@@ -24,11 +24,15 @@ import {
   savePushSubscription,
   getAllPushSubscriptions,
   updateBackgroundImage,
+  getGalleryItems,
+  addGalleryItem,
+  deleteGalleryItem,
   SiteSettings,
   SocialButton,
   BackgroundImage,
   MusicTrack,
   Announcement,
+  GalleryItem,
   PushSubscriptionData,
   getStatusConfig,
 } from '@/lib/db';
@@ -444,3 +448,54 @@ export async function sendPushNotification(payload: { title: string; message: st
     };
   }
 }
+
+// --- GALLERY ACTIONS ---
+
+export async function fetchGallery() {
+  try {
+    const list = await getGalleryItems();
+    return { success: true, data: list };
+  } catch (err: any) {
+    console.error('Error in fetchGallery:', err);
+    return { success: false, error: err?.message || 'Gagal mengambil item galeri.' };
+  }
+}
+
+export async function createGalleryMedia(data: Omit<GalleryItem, 'id'>) {
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+
+    const item = await addGalleryItem(data);
+    revalidatePath('/gallery');
+    revalidatePath('/settings/galeri');
+    return { success: true, data: item };
+  } catch (err: any) {
+    console.error('Error in createGalleryMedia:', err);
+    return { success: false, error: err?.message || 'Gagal menyimpan media ke galeri.' };
+  }
+}
+
+export async function removeGalleryMedia(id: string, mediaUrl?: string) {
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+
+    if (mediaUrl) {
+      try {
+        await deleteFileFromStorage('gallery', mediaUrl);
+      } catch (storageErr) {
+        console.warn('Gagal menghapus file media galeri dari storage:', storageErr);
+      }
+    }
+
+    const success = await deleteGalleryItem(id);
+    revalidatePath('/gallery');
+    revalidatePath('/settings/galeri');
+    return { success: true, data: success };
+  } catch (err: any) {
+    console.error('Error in removeGalleryMedia:', err);
+    return { success: false, error: err?.message || 'Gagal menghapus item dari galeri.' };
+  }
+}
+
