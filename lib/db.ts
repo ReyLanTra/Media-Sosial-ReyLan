@@ -906,6 +906,66 @@ export const deleteGalleryItem = async (id: string): Promise<boolean> => {
   }
 };
 
+export const updateGalleryItem = async (id: string, updates: Partial<Omit<GalleryItem, 'id'>>): Promise<GalleryItem | null> => {
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = getSupabaseAdmin();
+      const { data, error } = await supabase
+        .from('gallery_items')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('Supabase update gallery item error, fallback ke lokal:', error.message);
+        const db = readLocalDb();
+        if (db.gallery_items) {
+          const idx = db.gallery_items.findIndex(g => g.id === id);
+          if (idx !== -1) {
+            db.gallery_items[idx] = { ...db.gallery_items[idx], ...updates };
+            writeLocalDb(db);
+            return db.gallery_items[idx];
+          }
+        }
+        return null;
+      }
+      const db = readLocalDb();
+      if (db.gallery_items) {
+        const idx = db.gallery_items.findIndex(g => g.id === id);
+        if (idx !== -1) {
+          db.gallery_items[idx] = { ...db.gallery_items[idx], ...updates };
+          writeLocalDb(db);
+        }
+      }
+      return data as GalleryItem;
+    } catch (err) {
+      console.error('Supabase error on update gallery item:', err);
+      const db = readLocalDb();
+      if (db.gallery_items) {
+        const idx = db.gallery_items.findIndex(g => g.id === id);
+        if (idx !== -1) {
+          db.gallery_items[idx] = { ...db.gallery_items[idx], ...updates };
+          writeLocalDb(db);
+          return db.gallery_items[idx];
+        }
+      }
+      return null;
+    }
+  } else {
+    const db = readLocalDb();
+    if (db.gallery_items) {
+      const idx = db.gallery_items.findIndex(g => g.id === id);
+      if (idx !== -1) {
+        db.gallery_items[idx] = { ...db.gallery_items[idx], ...updates };
+        writeLocalDb(db);
+        return db.gallery_items[idx];
+      }
+    }
+    return null;
+  }
+};
+
 // --- PUSH SUBSCRIPTIONS ACTIONS ---
 
 export const savePushSubscription = async (data: PushSubscriptionData): Promise<PushSubscriptionData> => {

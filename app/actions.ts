@@ -26,6 +26,7 @@ import {
   updateBackgroundImage,
   getGalleryItems,
   addGalleryItem,
+  updateGalleryItem,
   deleteGalleryItem,
   SiteSettings,
   SocialButton,
@@ -496,6 +497,21 @@ export async function removeGalleryMedia(id: string, mediaUrl?: string) {
   } catch (err: any) {
     console.error('Error in removeGalleryMedia:', err);
     return { success: false, error: err?.message || 'Gagal menghapus item dari galeri.' };
+  }
+}
+
+export async function editGalleryMedia(id: string, updates: Partial<Omit<GalleryItem, 'id'>>) {
+  try {
+    const authed = await isAuthenticated();
+    if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+
+    const item = await updateGalleryItem(id, updates);
+    revalidatePath('/gallery');
+    revalidatePath('/settings/galeri');
+    return { success: true, data: item };
+  } catch (err: any) {
+    console.error('Error in editGalleryMedia:', err);
+    return { success: false, error: err?.message || 'Gagal memperbarui item galeri.' };
   }
 }
 

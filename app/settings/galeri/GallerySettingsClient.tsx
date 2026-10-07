@@ -17,11 +17,12 @@ import {
   CheckCircle2,
   Loader2,
   X,
-  Layers
+  Layers,
+  Pencil
 } from 'lucide-react';
 import { GalleryItem } from '@/lib/db';
 import { handleUpload } from '@/lib/supabase';
-import { createGalleryMedia, removeGalleryMedia } from '@/app/actions';
+import { createGalleryMedia, removeGalleryMedia, editGalleryMedia } from '@/app/actions';
 import ExifReader from 'exifreader';
 
 interface GallerySettingsClientProps {
@@ -68,6 +69,56 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
   } | null>(null);
 
   const [statusMessage, setStatusMessage] = React.useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Edit item state
+  const [editingItem, setEditingItem] = React.useState<GalleryItem | null>(null);
+  const [editCaption, setEditCaption] = React.useState('');
+  const [editTakenAt, setEditTakenAt] = React.useState('');
+  const [isSavingEdit, setIsSavingEdit] = React.useState(false);
+
+  const formatForDateTimeInput = (dateString?: string) => {
+    if (!dateString) return getDefaultDateTime();
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return getDefaultDateTime();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  };
+
+  const handleStartEdit = (item: GalleryItem) => {
+    setEditingItem(item);
+    setEditCaption(item.caption || '');
+    setEditTakenAt(formatForDateTimeInput(item.taken_at));
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem) return;
+    setIsSavingEdit(true);
+    setStatusMessage(null);
+    try {
+      const res = await editGalleryMedia(editingItem.id, {
+        caption: editCaption,
+        taken_at: editTakenAt,
+      });
+      if (res.success) {
+        setItems((prev) =>
+          prev.map((i) =>
+            i.id === editingItem.id
+              ? { ...i, caption: editCaption, taken_at: editTakenAt }
+              : i
+          )
+        );
+        setStatusMessage({ type: 'success', text: 'Caption dan waktu pengambilan media berhasil diperbarui!' });
+        setEditingItem(null);
+      } else {
+        setStatusMessage({ type: 'error', text: res.error || 'Gagal menyimpan perubahan.' });
+      }
+    } catch (err: any) {
+      setStatusMessage({ type: 'error', text: err?.message || 'Terjadi kesalahan sistem saat mengedit.' });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
 
   // Urutkan item: Waktu pengambilan paling baru di paling atas, paling lama di paling bawah
   const sortedItems = React.useMemo(() => {
@@ -782,14 +833,23 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
                     )}
                   </div>
 
-                  {/* Delete Button */}
-                  <button
-                    onClick={() => handleDelete(item.id, item.media_url)}
-                    className="absolute top-2 right-2 p-1.5 rounded-lg bg-red-600/80 hover:bg-red-500 text-white transition-all shadow-md"
-                    title="Hapus Media"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Top Right Action Buttons */}
+                  <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleStartEdit(item)}
+                      className="p-1.5 rounded-lg bg-blue-600/80 hover:bg-blue-500 text-white transition-all shadow-md"
+                      title="Edit Caption & Waktu"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(item.id, item.media_url)}
+                      className="p-1.5 rounded-lg bg-red-600/80 hover:bg-red-500 text-white transition-all shadow-md"
+                      title="Hapus Media"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Info Content */}
@@ -801,14 +861,31 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
                   <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-400">
                     <span className="flex items-center gap-1">
                       <Clock className="w-3 h-3 text-blue-400" />
-                      {new Date(item.taken_at).toLocaleDateString('id-ID', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
+                      {(() => {
+                        if (!item.taken_at) return '-';
+                        const d = new Date(item.taken_at);
+                        if (isNaN(d.getTime())) return item.taken_at;
+                        const dateFormatted = d.toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        });
+                        const timeFormatted = d.toLocaleTimeString('id-ID', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        }).replace('.', ':');
+                        return `${dateFormatted} • ${timeFormatted} WIB`;
+                      })()}
                     </span>
+
+                    <button
+                      onClick={() => handleStartEdit(item)}
+                      className="text-[10px] font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1 hover:underline"
+                    >
+                      <Pencil className="w-2.5 h-2.5" />
+                      <span>Edit</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -816,6 +893,110 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
           </div>
         )}
       </div>
+
+      {/* Modal Edit Media */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="relative w-full max-w-lg rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Pencil className="w-4 h-4 text-blue-400" />
+                <span>Edit Media Galeri</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                className="p-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Media Preview in Modal */}
+            <div className="relative aspect-video rounded-2xl bg-black/80 overflow-hidden border border-white/10">
+              {editingItem.media_type === 'video' ? (
+                <video
+                  src={editingItem.media_url}
+                  controls
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <img
+                  src={editingItem.media_url}
+                  alt={editingItem.caption}
+                  className="w-full h-full object-contain"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              {/* Caption Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Caption Media</span>
+                </label>
+                <textarea
+                  value={editCaption}
+                  onChange={(e) => setEditCaption(e.target.value)}
+                  rows={3}
+                  required
+                  placeholder="Tulis caption cerita momen ini..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-slate-950/60 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all resize-none"
+                />
+              </div>
+
+              {/* Taken At Date Time Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Waktu Pengambilan (Tanggal & Jam)</span>
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editTakenAt}
+                  onChange={(e) => setEditTakenAt(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-slate-950/60 text-white text-xs focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all color-scheme-dark"
+                />
+                <p className="text-[10px] text-slate-400">
+                  Ubah tanggal dan jam ini untuk memperbarui waktu pembuatan/pengambilan foto atau video ini.
+                </p>
+              </div>
+
+              {/* Form Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-medium text-slate-300 transition-all disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEdit}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-semibold text-white transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50"
+                >
+                  {isSavingEdit ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Simpan Perubahan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

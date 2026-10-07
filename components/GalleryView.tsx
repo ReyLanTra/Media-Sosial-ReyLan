@@ -298,11 +298,22 @@ export default function GalleryView({
                   <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
                     <span className="flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                      {new Date(item.taken_at).toLocaleDateString('id-ID', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                      })}
+                      {(() => {
+                        if (!item.taken_at) return '-';
+                        const d = new Date(item.taken_at);
+                        if (isNaN(d.getTime())) return item.taken_at;
+                        const dateFormatted = d.toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                        });
+                        const timeFormatted = d.toLocaleTimeString('id-ID', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: false,
+                        }).replace('.', ':');
+                        return `${dateFormatted} • ${timeFormatted} WIB`;
+                      })()}
                     </span>
 
                     <span className="text-[10px] text-blue-400 font-semibold group-hover:underline">
@@ -347,12 +358,23 @@ export default function GalleryView({
                   </span>
                   <span className="text-xs text-slate-400 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    {new Date(activeItem.taken_at).toLocaleDateString('id-ID', {
-                      weekday: 'long',
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric'
-                    })}
+                    {(() => {
+                      if (!activeItem.taken_at) return '-';
+                      const d = new Date(activeItem.taken_at);
+                      if (isNaN(d.getTime())) return activeItem.taken_at;
+                      const dateFormatted = d.toLocaleDateString('id-ID', {
+                        weekday: 'long',
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric',
+                      });
+                      const timeFormatted = d.toLocaleTimeString('id-ID', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                      }).replace('.', ':');
+                      return `${dateFormatted}, ${timeFormatted} WIB`;
+                    })()}
                   </span>
                 </div>
 
