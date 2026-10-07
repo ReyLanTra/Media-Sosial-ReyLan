@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-
 import { motion, AnimatePresence } from 'motion/react';
 import { BackgroundImage } from '@/lib/db';
 
@@ -57,8 +56,8 @@ export default function BackgroundMedia({
   // Fallback to default if no media available
   if ((!activeUrl && activeImages.length === 0)) {
     return (
-      <div className="absolute inset-0 -z-50 bg-radial from-neutral-900 via-neutral-950 to-black">
-        <div className="absolute inset-0 bg-black/40" />
+      <div className="fixed inset-0 -z-50 bg-radial from-neutral-900 via-neutral-950 to-black">
+        <div className="fixed inset-0 bg-black/40" />
       </div>
     );
   }
@@ -72,11 +71,6 @@ export default function BackgroundMedia({
           exit: { opacity: 0, x: -100 }
         };
       case 'zoom':
-        return {
-          initial: { opacity: 0, scale: 1.2 },
-          animate: { opacity: 1, scale: 1.05 },
-          exit: { opacity: 0, scale: 0.9 }
-        };
       case 'fade':
       default:
         return {
@@ -100,7 +94,7 @@ export default function BackgroundMedia({
           loop
           playsInline
           controls={false}
-          className="w-full h-full object-cover scale-105"
+          className="w-full h-full object-cover"
         />
       );
     }
@@ -110,7 +104,7 @@ export default function BackgroundMedia({
         <img
           src={activeUrl || ''}
           alt="Latar Belakang Animasi"
-          className="w-full h-full object-cover scale-105"
+          className="w-full h-full object-cover"
           referrerPolicy="no-referrer"
         />
       );
@@ -129,7 +123,7 @@ export default function BackgroundMedia({
             duration: activeTransition === 'fade' ? 1.5 : 0.8, 
             ease: 'easeInOut' 
           }}
-          className="absolute inset-0 w-full h-full object-cover scale-105"
+          className="absolute inset-0 w-full h-full object-cover"
           referrerPolicy="no-referrer"
         />
       </AnimatePresence>
@@ -137,7 +131,7 @@ export default function BackgroundMedia({
   };
 
   return (
-    <div key={isMobile ? 'mobile' : 'desktop'} className="absolute inset-0 -z-50 overflow-hidden w-full h-full select-none pointer-events-none">
+    <div key={isMobile ? 'mobile' : 'desktop'} className="fixed inset-0 -z-50 overflow-hidden w-full h-full select-none pointer-events-none">
       {/* Gelap overlay untuk kenyamanan membaca teks */}
       <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] z-10" />
 
