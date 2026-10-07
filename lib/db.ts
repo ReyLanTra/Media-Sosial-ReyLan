@@ -1064,9 +1064,15 @@ export const uploadFileToStorage = async (
   }
 
   if (!isSupabaseConfigured()) {
-    throw new Error(
-      `Supabase belum dikonfigurasi. Unggahan file tidak dapat disimpan karena sistem tidak lagi menggunakan penyimpanan lokal disk. Silakan masukkan variabel lingkungan SUPABASE_URL dan SUPABASE_ANON_KEY.`
-    );
+    try {
+      ensureLocalDirs();
+      const localFilePath = path.join(UPLOADS_DIR, fileName);
+      fs.writeFileSync(localFilePath, buffer);
+      return `/uploads/${fileName}`;
+    } catch (localErr) {
+      console.error('Gagal menyimpan file ke uploads lokal:', localErr);
+      throw new Error('Gagal menyimpan file (Supabase tidak dikonfigurasi dan penyimpanan lokal gagal).');
+    }
   }
 
   const supabase = getSupabaseAdmin();
@@ -1094,7 +1100,6 @@ export const uploadFileToStorage = async (
         await supabase.storage.from(bucketName).remove(filesToRemove);
       } else if (customId && (bucketName === 'logo-medsos' || bucketName === 'backsound' || bucketName === 'background' || bucketName === 'background-desktop')) {
         // Hanya hapus jika ada file dengan ID yang persis sama (untuk upsert yang bersih)
-        // Namun karena kita ingin "banyak file", kita biarkan saja kecuali sengaja menimpa ID yang sama
         const targetPrefix = bucketName === 'logo-medsos' ? `logo-medsos-${customId}` : `${bucketName}${customId}`;
         const filesToRemove = list.filter(f => f.name.startsWith(targetPrefix)).map(f => f.name);
         if (filesToRemove.length > 0) {
@@ -1108,23 +1113,46 @@ export const uploadFileToStorage = async (
 
   const contentType = getMimeType(ext);
 
-  // Unggah file baru ke Supabase
-  const { data, error } = await supabase.storage
-    .from(bucketName)
-    .upload(fileName, buffer, {
-      contentType: contentType,
-      upsert: true,
-    });
+  try {
+    // Unggah file baru ke Supabase
+    let uploadRes = await supabase.storage
+      .from(bucketName)
+      .upload(fileName, buffer, {
+        contentType: contentType,
+        upsert: true,
+      });
 
-  if (error) {
-    throw new Error(
-      `Gagal mengunggah file ke Supabase Storage (bucket: "${bucketName}"). ` +
-      `Detail: "${error.message}". Pastikan Anda telah mengonfigurasi variabel lingkungan SUPABASE_SERVICE_ROLE_KEY ` +
-      `agar unggahan file dapat melewati (bypass) kebijakan keamanan RLS secara tuntas.`
-    );
+    // Jika bucket belum ada, otomatis buat dan coba lagi
+    if (uploadRes.error && uploadRes.error.message.toLowerCase().includes('bucket not found')) {
+      try {
+        await supabase.storage.createBucket(bucketName, { public: true });
+        uploadRes = await supabase.storage
+          .from(bucketName)
+          .upload(fileName, buffer, {
+            contentType: contentType,
+            upsert: true,
+          });
+      } catch (createErr) {
+        console.warn(`Gagal auto-create bucket ${bucketName}:`, createErr);
+      }
+    }
+
+    if (uploadRes.error) {
+      console.warn(`Supabase Storage upload error (${bucketName}): ${uploadRes.error.message}. Fallback ke lokal.`);
+      ensureLocalDirs();
+      const localFilePath = path.join(UPLOADS_DIR, fileName);
+      fs.writeFileSync(localFilePath, buffer);
+      return `/uploads/${fileName}`;
+    }
+
+    // Dapatkan URL publik file
+    const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+    return publicUrlData.publicUrl;
+  } catch (err: any) {
+    console.warn(`Supabase Storage exception (${bucketName}): ${err?.message}. Fallback ke lokal.`);
+    ensureLocalDirs();
+    const localFilePath = path.join(UPLOADS_DIR, fileName);
+    fs.writeFileSync(localFilePath, buffer);
+    return `/uploads/${fileName}`;
   }
-
-  // Dapatkan URL publik file
-  const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
-  return publicUrlData.publicUrl;
 };

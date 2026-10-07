@@ -227,6 +227,7 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
 
       let successCount = 0;
       let failCount = 0;
+      let lastErrorMessage = '';
       const total = selectedFiles.length;
 
       // Process each file sequentially ("secara bertahap")
@@ -242,8 +243,14 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
           // Upload to storage bucket 'gallery'
           const finalMediaUrl = await handleUpload(item.file, 'gallery');
 
-          // Format taken_at to ISO string
-          const takenIso = new Date(item.detectedDate).toISOString();
+          // Format taken_at safely to ISO string
+          let takenIso = new Date().toISOString();
+          if (item.detectedDate) {
+            const parsedDate = new Date(item.detectedDate);
+            if (!isNaN(parsedDate.getTime())) {
+              takenIso = parsedDate.toISOString();
+            }
+          }
 
           const res = await createGalleryMedia({
             media_url: finalMediaUrl,
@@ -257,10 +264,12 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
             setItems((prev) => [res.data, ...prev]);
           } else {
             failCount++;
+            if (res.error) lastErrorMessage = res.error;
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error(`Gagal mengunggah file ${item.file.name}:`, err);
           failCount++;
+          if (err?.message) lastErrorMessage = err.message;
         }
       }
 
@@ -271,7 +280,7 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
         setStatusMessage({
           type: 'success',
           text: `Berhasil mengunggah ${successCount} file media ke galeri! ${
-            failCount > 0 ? `(${failCount} file gagal)` : ''
+            failCount > 0 ? `(${failCount} file gagal: ${lastErrorMessage})` : ''
           }`,
         });
 
@@ -280,7 +289,12 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
         setSelectedFiles([]);
         setCaption('');
       } else {
-        setStatusMessage({ type: 'error', text: 'Gagal mengunggah media ke galeri.' });
+        setStatusMessage({
+          type: 'error',
+          text: lastErrorMessage
+            ? `Gagal mengunggah media ke galeri: ${lastErrorMessage}`
+            : 'Gagal mengunggah media ke galeri.',
+        });
       }
     } else {
       // Direct URL mode
