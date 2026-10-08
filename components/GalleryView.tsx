@@ -35,6 +35,7 @@ import { checkGalleryAccessPassword } from '@/app/actions';
 import BackgroundMedia from './BackgroundMedia';
 import AudioPlayer from './AudioPlayer';
 import SecurityGuard from './SecurityGuard';
+import VirtualGalleryCard from './VirtualGalleryCard';
 
 interface GalleryViewProps {
   settings: SiteSettings;
@@ -57,17 +58,19 @@ export default function GalleryView({
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [copiedShare, setCopiedShare] = React.useState(false);
 
-  // Password Protection State
-  const [isUnlocked, setIsUnlocked] = React.useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('reylan_gallery_unlocked') === 'true';
-    }
-    return false;
-  });
+  // Password Protection State (Selalu terkunci saat halaman di-refresh)
+  const [isUnlocked, setIsUnlocked] = React.useState<boolean>(false);
   const [inputPassword, setInputPassword] = React.useState('');
   const [showPassword, setShowPassword] = React.useState(false);
   const [isVerifyingPassword, setIsVerifyingPassword] = React.useState(false);
   const [passwordError, setPasswordError] = React.useState<string | null>(null);
+
+  // Hapus session unlock lama agar refresh selalu meminta password
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('reylan_gallery_unlocked');
+    }
+  }, []);
 
   // ZIP Download State
   const [isZipping, setIsZipping] = React.useState(false);
@@ -115,7 +118,6 @@ export default function GalleryView({
       const res = await checkGalleryAccessPassword(inputPassword);
       if (res.success) {
         setIsUnlocked(true);
-        sessionStorage.setItem('reylan_gallery_unlocked', 'true');
         setInputPassword('');
       } else {
         setPasswordError('Password salah atau sudah kadaluarsa! Silakan coba lagi.');
@@ -485,93 +487,13 @@ export default function GalleryView({
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
               {filteredItems.map((item, index) => (
-                <motion.div
+                <VirtualGalleryCard
                   key={item.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.05 }}
-                  onClick={() => setSelectedIndex(index)}
-                  className="group cursor-pointer relative rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl overflow-hidden hover:border-blue-500/50 hover:shadow-[0_0_25px_rgba(59,130,246,0.25)] transition-all duration-300 flex flex-col justify-between"
-                >
-                  {/* Media Preview Container */}
-                  <div className="relative aspect-[4/3] bg-black/60 overflow-hidden">
-                    {item.media_type === 'video' ? (
-                      <div className="w-full h-full relative">
-                        <video
-                          src={item.media_url}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          muted
-                          playsInline
-                        />
-                        <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                          <div className="w-12 h-12 rounded-full bg-blue-600/80 group-hover:bg-blue-500 border border-white/20 flex items-center justify-center shadow-lg group-hover:scale-110 transition-all">
-                            <Play className="w-5 h-5 text-white fill-white translate-x-0.5" />
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <img
-                        src={item.media_url}
-                        alt={item.caption}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        referrerPolicy="no-referrer"
-                      />
-                    )}
-
-                    {/* Badge Media Type */}
-                    <div className="absolute top-3 left-3 px-2.5 py-1 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-semibold text-white flex items-center gap-1.5">
-                      {item.media_type === 'video' ? (
-                        <>
-                          <Video className="w-3 h-3 text-purple-400" />
-                          <span>Video</span>
-                        </>
-                      ) : (
-                        <>
-                          <ImageIcon className="w-3 h-3 text-blue-400" />
-                          <span>Foto</span>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Hover Overlay Icon */}
-                    <div className="absolute bottom-3 right-3 p-2 rounded-xl bg-black/60 backdrop-blur-md border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Maximize2 className="w-4 h-4 text-white" />
-                    </div>
-                  </div>
-
-                  {/* Caption & Timestamp Details */}
-                  <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
-                    <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed font-medium">
-                      {item.caption}
-                    </p>
-
-                    <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                        {(() => {
-                          if (!item.taken_at) return '-';
-                          const d = new Date(item.taken_at);
-                          if (isNaN(d.getTime())) return item.taken_at;
-                          const dateFormatted = d.toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          });
-                          const timeFormatted = d.toLocaleTimeString('id-ID', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false,
-                          }).replace('.', ':');
-                          return `${dateFormatted} • ${timeFormatted} WIB`;
-                        })()}
-                      </span>
-
-                      <span className="text-[10px] text-blue-400 font-semibold group-hover:underline">
-                        Lihat Full
-                      </span>
-                    </div>
-                  </div>
-                </motion.div>
+                  item={item}
+                  index={index}
+                  isPriority={index < 3}
+                  onSelect={() => setSelectedIndex(index)}
+                />
               ))}
             </div>
           )}
