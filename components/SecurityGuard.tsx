@@ -180,7 +180,8 @@ export default function SecurityGuard({ settings }: SecurityGuardProps) {
         const target = e.target as HTMLElement;
         if (!target.closest('input') && !target.closest('textarea')) {
           e.preventDefault();
-          showToast('⚠️ Tindakan Dilarang: Penyorotan dan penyalinan teks dilarang!');
+          // DO NOT call showToast here! Calling showToast on selectstart causes
+          // toast to appear on simple tap or left click.
         }
       }
     };
@@ -246,21 +247,40 @@ export default function SecurityGuard({ settings }: SecurityGuardProps) {
   }, [settings, showToast]);
 
   return (
-    <AnimatePresence>
-      {toastMessage && (
-        <motion.div
-          initial={{ opacity: 0, y: -40, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -30, scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-          className="fixed top-5 left-1/2 -translate-x-1/2 z-[999999] max-w-md w-[92vw] sm:w-auto px-5 py-3.5 rounded-2xl border border-red-500/40 bg-slate-950/95 text-red-200 shadow-[0_10px_35px_rgba(239,68,68,0.3)] backdrop-blur-2xl flex items-center gap-3 text-xs font-semibold leading-relaxed"
-        >
-          <div className="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0 text-red-400">
-            <Lock className="w-4 h-4 animate-pulse" />
-          </div>
-          <span className="flex-1">{toastMessage}</span>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <>
+      {/* Dynamic Security Style Injector */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        ${settings.disable_text_select ? `
+          body, html, :root { -webkit-user-select: none !important; user-select: none !important; }
+          input, textarea, [contenteditable="true"] { -webkit-user-select: text !important; user-select: text !important; }
+        ` : ''}
+        ${settings.disable_image_save ? `
+          img, video { -webkit-touch-callout: none !important; -webkit-user-drag: none !important; }
+        ` : ''}
+        ${settings.disable_link_preview ? `
+          a, button, [role="button"] { -webkit-touch-callout: none !important; }
+        ` : ''}
+        ${settings.disable_pull_refresh ? `
+          body, html { overscroll-behavior-y: none !important; overscroll-behavior: none !important; }
+        ` : ''}
+      `}} />
+
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -30, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            className="fixed top-5 left-1/2 -translate-x-1/2 z-[999999] max-w-md w-[92vw] sm:w-auto px-5 py-3.5 rounded-2xl border border-red-500/40 bg-slate-950/95 text-red-200 shadow-[0_10px_35px_rgba(239,68,68,0.3)] backdrop-blur-2xl flex items-center gap-3 text-xs font-semibold leading-relaxed"
+          >
+            <div className="w-8 h-8 rounded-xl bg-red-500/20 border border-red-500/30 flex items-center justify-center shrink-0 text-red-400">
+              <Lock className="w-4 h-4 animate-pulse" />
+            </div>
+            <span className="flex-1">{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

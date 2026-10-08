@@ -58,7 +58,12 @@ export default function GalleryView({
   const [copiedShare, setCopiedShare] = React.useState(false);
 
   // Password Protection State
-  const [isUnlocked, setIsUnlocked] = React.useState<boolean>(false);
+  const [isUnlocked, setIsUnlocked] = React.useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('reylan_gallery_unlocked') === 'true';
+    }
+    return false;
+  });
   const [inputPassword, setInputPassword] = React.useState('');
   const [showPassword, setShowPassword] = React.useState(false);
   const [isVerifyingPassword, setIsVerifyingPassword] = React.useState(false);
@@ -71,16 +76,6 @@ export default function GalleryView({
     total: number;
     filename: string;
   } | null>(null);
-
-  // Check initial session storage for unlocked state
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const unlocked = sessionStorage.getItem('reylan_gallery_unlocked') === 'true';
-      if (unlocked) {
-        setIsUnlocked(true);
-      }
-    }
-  }, []);
 
   // Sync Favicon dynamically for /gallery page
   React.useEffect(() => {
