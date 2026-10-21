@@ -27,7 +27,11 @@ import {
   Shuffle,
   CalendarClock,
   AlertTriangle,
-  Check
+  Check,
+  User,
+  Sparkles,
+  Music,
+  Volume2
 } from 'lucide-react';
 import { GalleryItem, GalleryPassword } from '@/lib/db';
 import { handleUpload } from '@/lib/supabase';
@@ -102,8 +106,14 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
   const [copiedPassId, setCopiedPassId] = React.useState<string | null>(null);
 
   // Password Modal Form State
+  const [passUsername, setPassUsername] = React.useState('');
   const [passLabel, setPassLabel] = React.useState('');
   const [passText, setPassText] = React.useState('');
+  const [passWelcomeMessage, setPassWelcomeMessage] = React.useState('');
+  const [passWelcomeMediaUrl, setPassWelcomeMediaUrl] = React.useState('');
+  const [passWelcomeMediaType, setPassWelcomeMediaType] = React.useState<'audio' | 'video' | 'image' | 'other' | null>(null);
+  const [isUploadingWelcomeMedia, setIsUploadingWelcomeMedia] = React.useState(false);
+  const [welcomeMediaError, setWelcomeMediaError] = React.useState<string | null>(null);
   const [passDurationType, setPassDurationType] = React.useState<'forever' | '1h' | '1d' | '7d' | '30d' | 'custom'>('forever');
   const [passCustomExpiresAt, setPassCustomExpiresAt] = React.useState('');
   const [passIsActive, setPassIsActive] = React.useState(true);
@@ -152,6 +162,44 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
     setPassText(pass.join(''));
   };
 
+  const handleWelcomeMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+      setWelcomeMediaError('Ukuran file maksimal 50MB!');
+      return;
+    }
+
+    setIsUploadingWelcomeMedia(true);
+    setWelcomeMediaError(null);
+
+    try {
+      const publicUrl = await handleUpload(file, 'gallery');
+      if (publicUrl) {
+        setPassWelcomeMediaUrl(publicUrl);
+        const mime = file.type.toLowerCase();
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'aac'].includes(ext)) {
+          setPassWelcomeMediaType('audio');
+        } else if (mime.startsWith('video/') || ['mp4', 'webm', 'mov'].includes(ext)) {
+          setPassWelcomeMediaType('video');
+        } else if (mime.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
+          setPassWelcomeMediaType('image');
+        } else {
+          setPassWelcomeMediaType('other');
+        }
+      } else {
+        setWelcomeMediaError('Gagal mengunggah media selamat datang.');
+      }
+    } catch (err: any) {
+      setWelcomeMediaError(err?.message || 'Terjadi kesalahan saat mengunggah.');
+    } finally {
+      setIsUploadingWelcomeMedia(false);
+      e.target.value = '';
+    }
+  };
+
   const calculateExpiresAt = (): string | null => {
     if (passDurationType === 'forever') return null;
     const now = new Date();
@@ -169,7 +217,12 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
 
   const handleOpenAddPassModal = () => {
     setEditingPassword(null);
+    setPassUsername('');
     setPassLabel('');
+    setPassWelcomeMessage('');
+    setPassWelcomeMediaUrl('');
+    setPassWelcomeMediaType(null);
+    setWelcomeMediaError(null);
     generateRandomPassword();
     setPassDurationType('forever');
     setPassCustomExpiresAt('');
@@ -179,8 +232,13 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
 
   const handleOpenEditPassModal = (pass: GalleryPassword) => {
     setEditingPassword(pass);
+    setPassUsername(pass.username || '');
     setPassLabel(pass.label || '');
     setPassText(pass.password_text || '');
+    setPassWelcomeMessage(pass.welcome_message || '');
+    setPassWelcomeMediaUrl(pass.welcome_media_url || '');
+    setPassWelcomeMediaType(pass.welcome_media_type || null);
+    setWelcomeMediaError(null);
     if (!pass.expires_at) {
       setPassDurationType('forever');
       setPassCustomExpiresAt('');
@@ -194,6 +252,21 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
 
   const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const cleanUser = passUsername.trim().toLowerCase();
+    if (!cleanUser || cleanUser.length < 3) {
+      setStatusMessage({ type: 'error', text: 'Username wajib diisi minimal 3 karakter.' });
+      return;
+    }
+    if (cleanUser === 'admin') {
+      setStatusMessage({ type: 'error', text: 'Username "admin" tidak dapat dibuat (khusus admin utama).' });
+      return;
+    }
+    if (!/^[a-zA-Z0-9_.-]+$/.test(cleanUser)) {
+      setStatusMessage({ type: 'error', text: 'Username hanya boleh memuat huruf, angka, titik, strip (-), atau garis bawah (_).' });
+      return;
+    }
+
     if (!passText.trim() || passText.length < 8 || passText.length > 16) {
       setStatusMessage({ type: 'error', text: 'Password harus terdiri dari 8 hingga 16 karakter.' });
       return;
@@ -207,31 +280,39 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
     try {
       if (editingPassword) {
         const res = await editGalleryPassword(editingPassword.id, {
-          label: passLabel.trim() || 'Password Galeri',
+          username: cleanUser,
+          label: passLabel.trim() || `Akses @${cleanUser}`,
           password_text: passText.trim(),
+          welcome_message: passWelcomeMessage.trim() || null,
+          welcome_media_url: passWelcomeMediaUrl.trim() || null,
+          welcome_media_type: passWelcomeMediaType || null,
           expires_at: expIso,
           is_active: passIsActive,
         });
         if (res.success && res.data) {
           setPasswords((prev) => prev.map((p) => (p.id === editingPassword.id ? res.data! : p)));
-          setStatusMessage({ type: 'success', text: 'Password custom berhasil diperbarui!' });
+          setStatusMessage({ type: 'success', text: `Akun akses @${cleanUser} berhasil diperbarui!` });
           setShowPassModal(false);
         } else {
-          setStatusMessage({ type: 'error', text: res.error || 'Gagal menyimpan password.' });
+          setStatusMessage({ type: 'error', text: res.error || 'Gagal menyimpan akun akses.' });
         }
       } else {
         const res = await addGalleryPassword({
-          label: passLabel.trim() || 'Password Galeri Custom',
+          username: cleanUser,
+          label: passLabel.trim() || `Akses @${cleanUser}`,
           password_text: passText.trim(),
+          welcome_message: passWelcomeMessage.trim() || null,
+          welcome_media_url: passWelcomeMediaUrl.trim() || null,
+          welcome_media_type: passWelcomeMediaType || null,
           expires_at: expIso,
           is_active: passIsActive,
         });
         if (res.success && res.data) {
           setPasswords((prev) => [res.data!, ...prev]);
-          setStatusMessage({ type: 'success', text: 'Password custom baru berhasil dibuat!' });
+          setStatusMessage({ type: 'success', text: `Akun akses baru @${cleanUser} berhasil dibuat!` });
           setShowPassModal(false);
         } else {
-          setStatusMessage({ type: 'error', text: res.error || 'Gagal membuat password.' });
+          setStatusMessage({ type: 'error', text: res.error || 'Gagal membuat akun akses.' });
         }
       }
     } catch (err: any) {
@@ -1009,17 +1090,17 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
         {/* List Password Custom */}
         <div className="space-y-3">
           <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
-            Daftar Password Custom ({passwords.length})
+            Daftar Akun Akses Galeri ({passwords.length})
           </h3>
 
           {isLoadingPasswords ? (
             <div className="p-6 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-              <span>Memuat daftar password...</span>
+              <span>Memuat daftar akun akses...</span>
             </div>
           ) : passwords.length === 0 ? (
             <div className="p-6 rounded-2xl border border-dashed border-white/10 text-center text-xs text-slate-500 space-y-1">
-              <p>Belum ada password custom. Klik &quot;Buat Password Custom&quot; di atas jika Anda ingin membagikan akses galeri secara khusus dengan batas waktu.</p>
+              <p>Belum ada akun akses custom. Klik &quot;Buat Password Custom&quot; di atas untuk membuat username dan password khusus beserta pesan selamat datang personal.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1045,59 +1126,98 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
                         : 'border-white/10 bg-slate-950/70 hover:border-amber-500/30'
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-0.5 min-w-0">
-                        <p className="text-xs font-bold text-white truncate">{pass.label}</p>
-                        
-                        {/* Status Badge */}
-                        <div className="flex items-center gap-2 pt-0.5">
-                          {!pass.is_active ? (
-                            <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
-                              Nonaktif
+                    <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-1 min-w-0">
+                          {/* Username Badge */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-blue-500/20 text-blue-300 font-mono text-xs font-bold border border-blue-500/30">
+                              <User className="w-3 h-3 text-blue-400" />
+                              @{pass.username || 'tamu'}
                             </span>
-                          ) : isExpired ? (
-                            <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
-                              Kadaluarsa
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                              Aktif
-                            </span>
-                          )}
+                            <span className="text-xs font-bold text-white truncate">{pass.label}</span>
+                          </div>
 
-                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                            <CalendarClock className="w-3 h-3 text-slate-400" />
-                            {pass.expires_at ? (
-                              isExpired ? (
-                                <span className="text-red-400">Telah Berakhir</span>
-                              ) : (
-                                <span>Berakhir: {new Date(pass.expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                              )
+                          {/* Status Badge & Expiration */}
+                          <div className="flex items-center gap-2 pt-0.5 flex-wrap">
+                            {!pass.is_active ? (
+                              <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                                Nonaktif
+                              </span>
+                            ) : isExpired ? (
+                              <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/30">
+                                Kadaluarsa
+                              </span>
                             ) : (
-                              <span className="text-amber-300 font-medium">Selamanya</span>
+                              <span className="text-[9px] font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                Aktif
+                              </span>
                             )}
-                          </span>
+
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                              <CalendarClock className="w-3 h-3 text-slate-400" />
+                              {pass.expires_at ? (
+                                isExpired ? (
+                                  <span className="text-red-400">Telah Berakhir</span>
+                                ) : (
+                                  <span>Berakhir: {new Date(pass.expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                )
+                              ) : (
+                                <span className="text-amber-300 font-medium">Selamanya</span>
+                              )}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditPassModal(pass)}
+                            className="p-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white transition-all cursor-pointer"
+                            title="Edit Akun & Pesan Selamat Datang"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePassword(pass.id)}
+                            className="p-1.5 rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all cursor-pointer"
+                            title="Hapus Akun"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditPassModal(pass)}
-                          className="p-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white transition-all"
-                          title="Edit Password"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeletePassword(pass.id)}
-                          className="p-1.5 rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all"
-                          title="Hapus Password"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {/* Welcome message preview */}
+                      {pass.welcome_message && (
+                        <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 text-[11px] text-slate-300 flex items-start gap-2">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                          <p className="line-clamp-2 italic leading-relaxed">&ldquo;{pass.welcome_message}&rdquo;</p>
+                        </div>
+                      )}
+
+                      {/* Welcome media indicator */}
+                      {pass.welcome_media_url && (
+                        <div className="flex items-center gap-1.5 text-[10px] text-purple-300 font-medium bg-purple-500/10 border border-purple-500/20 px-2 py-1 rounded-lg w-fit">
+                          {pass.welcome_media_type === 'audio' ? (
+                            <>
+                              <Music className="w-3 h-3 text-purple-400" />
+                              <span>Audio Sambutan (MP3) terpasang</span>
+                            </>
+                          ) : pass.welcome_media_type === 'video' ? (
+                            <>
+                              <Video className="w-3 h-3 text-purple-400" />
+                              <span>Video Sambutan (MP4) terpasang</span>
+                            </>
+                          ) : (
+                            <>
+                              <ImageIcon className="w-3 h-3 text-purple-400" />
+                              <span>Gambar Sambutan terpasang</span>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Password Box */}
@@ -1107,16 +1227,16 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
                         <button
                           type="button"
                           onClick={() => togglePassVisibility(pass.id)}
-                          className="p-1 text-slate-400 hover:text-white"
+                          className="p-1 text-slate-400 hover:text-white cursor-pointer"
                           title={isVisible ? 'Sembunyikan' : 'Tampilkan'}
                         >
                           {isVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleCopyPassword(pass.id, pass.password_text)}
-                          className="p-1 text-slate-400 hover:text-amber-400"
-                          title="Salin Password"
+                          onClick={() => handleCopyPassword(pass.id, `Username: ${pass.username}\nPassword: ${pass.password_text}`)}
+                          className="p-1 text-slate-400 hover:text-amber-400 cursor-pointer"
+                          title="Salin Username & Password"
                         >
                           {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                         </button>
@@ -1348,33 +1468,59 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
         </div>
       )}
 
-      {/* Modal Tambah / Edit Password Custom */}
+      {/* Modal Tambah / Edit Password & Akun Akses Galeri */}
       {showPassModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <KeyRound className="w-4 h-4 text-amber-400" />
-                <span>{editingPassword ? 'Edit Password Custom' : 'Buat Password Custom Baru'}</span>
-              </h3>
+          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-white/10 pb-4 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
+              <div className="space-y-0.5">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <KeyRound className="w-4 h-4 text-amber-400" />
+                  <span>{editingPassword ? 'Edit Akun Akses Galeri' : 'Buat Akun Akses Galeri Baru'}</span>
+                </h3>
+                <p className="text-[11px] text-slate-400">Atur username, password, dan pesan penyambutan personal.</p>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowPassModal(false)}
-                className="p-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white transition-all"
+                className="p-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white transition-all cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSavePassword} className="space-y-4">
-              {/* Label */}
+              {/* Username Field */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 block">Label / Catatan Password</label>
+                <label className="text-xs font-semibold text-slate-300 block">
+                  Username Login <span className="text-red-400">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-mono font-bold">@</span>
+                  <input
+                    type="text"
+                    required
+                    minLength={3}
+                    maxLength={30}
+                    value={passUsername}
+                    onChange={(e) => setPassUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_.-]/g, ''))}
+                    placeholder="contoh: budi_santoso, teman_sma"
+                    className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-white/10 bg-slate-950 text-blue-300 font-mono text-xs focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Wajib diisi (min 3 huruf/angka). Tamu wajib memasukkan username ini bersama password di halaman /gallery.
+                </p>
+              </div>
+
+              {/* Label / Catatan */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300 block">Label / Catatan Identitas</label>
                 <input
                   type="text"
                   value={passLabel}
                   onChange={(e) => setPassLabel(e.target.value)}
-                  placeholder="Misal: Password untuk Teman SMA"
+                  placeholder="Misal: Akses untuk Teman SMA / Rekan Kerja"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-amber-500"
                 />
               </div>
@@ -1388,7 +1534,7 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
                   <button
                     type="button"
                     onClick={generateRandomPassword}
-                    className="text-[10px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline"
+                    className="text-[10px] font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <Shuffle className="w-3 h-3" />
                     <span>Acak Password</span>
@@ -1405,13 +1551,114 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
                   className="w-full px-3.5 py-2.5 rounded-xl border border-white/10 bg-slate-950 text-amber-300 font-mono text-xs focus:outline-none focus:border-amber-500"
                 />
                 <p className="text-[10px] text-slate-400">
-                  Password acak otomatis mengombinasikan huruf besar, huruf kecil, angka, dan simbol (8-16 digit).
+                  Password terdiri dari kombinasi huruf besar, huruf kecil, angka, dan simbol (8-16 digit).
                 </p>
+              </div>
+
+              {/* Pesan Selamat Datang Custom */}
+              <div className="space-y-1.5 p-3 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Pesan Selamat Datang Khusus Username Ini</span>
+                </div>
+                <textarea
+                  value={passWelcomeMessage}
+                  onChange={(e) => setPassWelcomeMessage(e.target.value)}
+                  rows={3}
+                  placeholder={`Tuliskan ucapan selamat datang spesial untuk @${passUsername || 'username'} saat berhasil login ke galeri...`}
+                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-slate-950 text-white text-xs focus:outline-none focus:border-amber-500 leading-relaxed resize-none"
+                />
+                <p className="text-[10px] text-amber-200/70">
+                  Pesan ini akan langsung muncul di UI pop-up selamat datang ketika user berhasil memasukkan username dan password.
+                </p>
+              </div>
+
+              {/* Media Selamat Datang (Audio MP3 / Video MP4 / Gambar) */}
+              <div className="space-y-2 p-3 rounded-2xl bg-purple-500/5 border border-purple-500/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-300">
+                    <Music className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Media Selamat Datang (MP3 / MP4 / Gambar)</span>
+                  </div>
+                  {passWelcomeMediaUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPassWelcomeMediaUrl('');
+                        setPassWelcomeMediaType(null);
+                      }}
+                      className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 hover:underline cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Hapus Media</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-purple-500/30 hover:border-purple-400/60 bg-purple-950/20 hover:bg-purple-950/30 transition-all cursor-pointer">
+                    <input
+                      type="file"
+                      accept="audio/*,video/*,image/*"
+                      onChange={handleWelcomeMediaUpload}
+                      disabled={isUploadingWelcomeMedia}
+                      className="hidden"
+                    />
+                    {isUploadingWelcomeMedia ? (
+                      <div className="flex items-center gap-2 text-xs text-purple-300">
+                        <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                        <span>Mengunggah berkas media (maks 50MB)...</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs text-purple-200">
+                        <Upload className="w-4 h-4 text-purple-400" />
+                        <span>Pilih Berkas MP3, MP4, atau Foto Sambutan</span>
+                      </div>
+                    )}
+                  </label>
+
+                  {welcomeMediaError && (
+                    <p className="text-[11px] text-red-400 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{welcomeMediaError}</span>
+                    </p>
+                  )}
+
+                  {/* Preview of Welcome Media */}
+                  {passWelcomeMediaUrl && (
+                    <div className="p-2.5 rounded-xl bg-slate-950/80 border border-white/10 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 flex items-center gap-1.5">
+                          {passWelcomeMediaType === 'audio' ? (
+                            <Volume2 className="w-3.5 h-3.5 text-purple-400" />
+                          ) : passWelcomeMediaType === 'video' ? (
+                            <Video className="w-3.5 h-3.5 text-purple-400" />
+                          ) : (
+                            <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
+                          )}
+                          <span className="font-medium text-slate-200">
+                            Pratinjau Media ({passWelcomeMediaType?.toUpperCase() || 'FILE'})
+                          </span>
+                        </span>
+                      </div>
+
+                      {passWelcomeMediaType === 'audio' ? (
+                        <audio src={passWelcomeMediaUrl} controls className="w-full h-8" />
+                      ) : passWelcomeMediaType === 'video' ? (
+                        <video src={passWelcomeMediaUrl} controls className="w-full max-h-40 rounded-lg object-contain bg-black" />
+                      ) : passWelcomeMediaType === 'image' ? (
+                        <img src={passWelcomeMediaUrl} alt="Preview" className="max-h-36 rounded-lg object-contain mx-auto" />
+                      ) : (
+                        <p className="text-xs text-slate-300 truncate font-mono">{passWelcomeMediaUrl}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Duration / Expiry Setting */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 block">Masa Aktif Password</label>
+                <label className="text-xs font-semibold text-slate-300 block">Masa Aktif Akun</label>
                 <select
                   value={passDurationType}
                   onChange={(e) => setPassDurationType(e.target.value as any)}
@@ -1442,7 +1689,7 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
 
               {/* Status Toggle */}
               <div className="flex items-center justify-between pt-2">
-                <span className="text-xs font-semibold text-slate-300">Status Password</span>
+                <span className="text-xs font-semibold text-slate-300">Status Akun Akses</span>
                 <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
                   <input
                     type="checkbox"
@@ -1455,18 +1702,18 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
               </div>
 
               {/* Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10 sticky bottom-0 bg-slate-900 pb-1">
                 <button
                   type="button"
                   onClick={() => setShowPassModal(false)}
-                  disabled={isSavingPass}
-                  className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-medium text-slate-300 transition-all disabled:opacity-50"
+                  disabled={isSavingPass || isUploadingWelcomeMedia}
+                  className="px-4 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-medium text-slate-300 transition-all disabled:opacity-50 cursor-pointer"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={isSavingPass}
+                  disabled={isSavingPass || isUploadingWelcomeMedia}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-xs font-bold text-slate-950 transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
                 >
                   {isSavingPass ? (
@@ -1477,7 +1724,7 @@ export default function GallerySettingsClient({ initialItems }: GallerySettingsC
                   ) : (
                     <>
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Simpan Password</span>
+                      <span>Simpan Akun Akses</span>
                     </>
                   )}
                 </button>

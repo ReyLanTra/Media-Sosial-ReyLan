@@ -26,12 +26,16 @@ import {
   Archive,
   Loader2,
   ShieldAlert,
-  KeyRound
+  KeyRound,
+  User,
+  Music,
+  Volume2,
+  ArrowRight
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { SiteSettings, BackgroundImage, MusicTrack, GalleryItem } from '@/lib/db';
-import { checkGalleryAccessPassword } from '@/app/actions';
+import { checkGalleryAccess, checkGalleryAccessPassword } from '@/app/actions';
 import BackgroundMedia from './BackgroundMedia';
 import AudioPlayer from './AudioPlayer';
 import SecurityGuard from './SecurityGuard';
@@ -58,14 +62,24 @@ export default function GalleryView({
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [copiedShare, setCopiedShare] = React.useState(false);
 
-  // Password Protection State (Selalu terkunci saat halaman di-refresh)
+  // Credentials & Welcome Protection State (Selalu terkunci saat halaman di-refresh)
   const [isUnlocked, setIsUnlocked] = React.useState<boolean>(false);
+  const [inputUsername, setInputUsername] = React.useState('');
   const [inputPassword, setInputPassword] = React.useState('');
   const [showPassword, setShowPassword] = React.useState(false);
   const [isVerifyingPassword, setIsVerifyingPassword] = React.useState(false);
   const [passwordError, setPasswordError] = React.useState<string | null>(null);
 
-  // Hapus session unlock lama agar refresh selalu meminta password
+  // Welcome Screen State
+  const [showWelcomeModal, setShowWelcomeModal] = React.useState(false);
+  const [welcomeData, setWelcomeData] = React.useState<{
+    username: string;
+    welcome_message?: string | null;
+    welcome_media_url?: string | null;
+    welcome_media_type?: string | null;
+  } | null>(null);
+
+  // Hapus session unlock lama agar refresh selalu meminta kredensial
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('reylan_gallery_unlocked');
@@ -103,9 +117,13 @@ export default function GalleryView({
     return () => window.removeEventListener('click', triggerAudio);
   }, []);
 
-  // Unlock Handler
-  const handleVerifyPassword = async (e: React.FormEvent) => {
+  // Verification Handler
+  const handleVerifyCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!inputUsername.trim()) {
+      setPasswordError('Silakan masukkan username Anda.');
+      return;
+    }
     if (!inputPassword.trim()) {
       setPasswordError('Silakan masukkan password.');
       return;
@@ -115,23 +133,37 @@ export default function GalleryView({
     setPasswordError(null);
 
     try {
-      const res = await checkGalleryAccessPassword(inputPassword);
+      const res = await checkGalleryAccess(inputUsername.trim(), inputPassword.trim());
       if (res.success) {
-        setIsUnlocked(true);
+        setWelcomeData({
+          username: res.username || inputUsername.trim(),
+          welcome_message: res.welcome_message,
+          welcome_media_url: res.welcome_media_url,
+          welcome_media_type: res.welcome_media_type,
+        });
+        setShowWelcomeModal(true);
         setInputPassword('');
+        setInputUsername('');
+        setPasswordError(null);
       } else {
-        setPasswordError('Password salah atau sudah kadaluarsa! Silakan coba lagi.');
+        setPasswordError(res.error || 'Username atau password salah! Silakan coba lagi.');
       }
-    } catch (err) {
-      setPasswordError('Gagal memverifikasi password. Silakan coba lagi.');
+    } catch (err: any) {
+      setPasswordError(err?.message || 'Gagal memverifikasi akun akses. Silakan coba lagi.');
     } finally {
       setIsVerifyingPassword(false);
     }
   };
 
+  const handleProceedToGallery = () => {
+    setShowWelcomeModal(false);
+    setIsUnlocked(true);
+  };
+
   const handleLockGallery = () => {
     setIsUnlocked(false);
-    sessionStorage.removeItem('reylan_gallery_unlocked');
+    setShowWelcomeModal(false);
+    setWelcomeData(null);
   };
 
   // ZIP Download All Items
@@ -290,94 +322,215 @@ export default function GalleryView({
         profilePhotoUrl={settings.profile_photo_url || undefined}
       />
 
-      {/* PASSWORD GATE SCREEN */}
+      {/* PASSWORD & WELCOME GATE SCREEN */}
       {!isUnlocked ? (
-        <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/80 backdrop-blur-2xl p-6 md:p-8 shadow-2xl space-y-6"
-          >
-            <div className="text-center space-y-2">
-              <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-xl shadow-blue-500/20 border border-white/20">
-                <KeyRound className="w-8 h-8" />
-              </div>
-              <h1 className="text-xl font-black text-white tracking-tight">Galeri Terkunci Password</h1>
-              <p className="text-xs text-slate-300">
-                Masukkan password khusus untuk mengakses koleksi foto & video kenangan <span className="font-semibold text-blue-400">{settings.account_name}</span>.
-              </p>
-            </div>
+        showWelcomeModal && welcomeData ? (
+          /* UI POP-UP SELAMAT DATANG DENGAN PESAN CUSTOM & MEDIA */
+          <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 22 }}
+              className="w-full max-w-lg rounded-3xl border border-amber-500/30 bg-slate-950/90 backdrop-blur-2xl p-6 md:p-8 shadow-[0_0_50px_rgba(245,158,11,0.2)] space-y-6 text-center"
+            >
+              {/* Header Icon & Greeting */}
+              <div className="space-y-3">
+                <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-slate-950 shadow-xl shadow-amber-500/30 border border-white/20">
+                  <Sparkles className="w-8 h-8 fill-slate-950" />
+                </div>
 
-            {/* Disclaimer Box */}
-            <div className="p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-200 space-y-2 text-xs leading-relaxed">
-              <div className="flex items-center gap-2 font-bold text-amber-300">
-                <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
-                <span>Disclaimer / Peringatan:</span>
-              </div>
-              <p className="text-[11px] text-amber-100/90 leading-snug">
-                Foto/video di dalam galeri ini memuat kenangan & foto-foto lama yang mungkin bisa bikin ilfeel, cringe, salah tingkah, atau nostalgia berlebihan. Harap persiapkan mental Anda! 😅
-              </p>
-            </div>
-
-            {/* Password Form */}
-            <form onSubmit={handleVerifyPassword} className="space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300 block">Password Galeri</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={inputPassword}
-                    onChange={(e) => setInputPassword(e.target.value)}
-                    placeholder="Masukkan 8-16 digit password..."
-                    className="w-full pl-4 pr-10 py-3 rounded-xl border border-white/10 bg-slate-900/90 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 transition-all font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 font-mono text-xs font-bold border border-blue-500/30">
+                    <User className="w-3.5 h-3.5 text-blue-400" />
+                    <span>@{welcomeData.username}</span>
+                  </div>
+                  <h1 className="text-2xl font-black text-white tracking-tight">Selamat Datang di Galeri!</h1>
                 </div>
               </div>
 
-              {passwordError && (
-                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{passwordError}</span>
+              {/* Custom Welcome Message Box */}
+              <div className="p-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 text-amber-100 space-y-2 text-left relative overflow-hidden">
+                <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3" />
+                  <span>Pesan Sambutan Spesial</span>
+                </span>
+                <p className="text-sm md:text-base font-medium leading-relaxed italic text-white/95">
+                  &ldquo;{welcomeData.welcome_message || `Halo @${welcomeData.username}, selamat datang di galeri kenangan resmi ${settings.account_name}!`}&rdquo;
+                </p>
+              </div>
+
+              {/* Welcome Media if provided (MP3 / MP4 / Gambar) */}
+              {welcomeData.welcome_media_url && (
+                <div className="p-4 rounded-2xl border border-white/10 bg-slate-900/80 space-y-3 text-left">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-purple-300">
+                    {welcomeData.welcome_media_type === 'audio' ? (
+                      <Volume2 className="w-4 h-4 text-purple-400" />
+                    ) : welcomeData.welcome_media_type === 'video' ? (
+                      <Video className="w-4 h-4 text-purple-400" />
+                    ) : (
+                      <ImageIcon className="w-4 h-4 text-purple-400" />
+                    )}
+                    <span>
+                      {welcomeData.welcome_media_type === 'audio' 
+                        ? 'Audio Sambutan (MP3)' 
+                        : welcomeData.welcome_media_type === 'video' 
+                        ? 'Video Sambutan (MP4)' 
+                        : 'Foto Sambutan'}
+                    </span>
+                  </div>
+
+                  {welcomeData.welcome_media_type === 'audio' ? (
+                    <div className="space-y-2">
+                      <audio
+                        src={welcomeData.welcome_media_url}
+                        controls
+                        autoPlay
+                        className="w-full"
+                      />
+                      <p className="text-[10px] text-slate-400 italic">
+                        *Audio sambutan diputar khusus untuk kunjungan Anda.
+                      </p>
+                    </div>
+                  ) : welcomeData.welcome_media_type === 'video' ? (
+                    <video
+                      src={welcomeData.welcome_media_url}
+                      controls
+                      autoPlay
+                      playsInline
+                      className="w-full max-h-64 rounded-xl object-contain bg-black shadow-lg"
+                    />
+                  ) : (
+                    <img
+                      src={welcomeData.welcome_media_url}
+                      alt="Sambutan"
+                      className="max-h-56 rounded-xl object-contain mx-auto shadow-lg"
+                    />
+                  )}
                 </div>
               )}
 
+              {/* Enter Button */}
               <button
-                type="submit"
-                disabled={isVerifyingPassword}
-                className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white font-semibold text-xs transition-all shadow-lg shadow-blue-600/30 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                onClick={handleProceedToGallery}
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm transition-all shadow-xl shadow-blue-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
               >
-                {isVerifyingPassword ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Memverifikasi...</span>
-                  </>
-                ) : (
-                  <>
-                    <Unlock className="w-4 h-4" />
-                    <span>Buka Galeri</span>
-                  </>
-                )}
+                <span>Buka Galeri Sekarang</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
-            </form>
+            </motion.div>
+          </div>
+        ) : (
+          /* LOGIN FORM SCREEN (USERNAME + PASSWORD) */
+          <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-950/80 backdrop-blur-2xl p-6 md:p-8 shadow-2xl space-y-6"
+            >
+              <div className="text-center space-y-2">
+                <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-xl shadow-blue-500/20 border border-white/20">
+                  <KeyRound className="w-8 h-8" />
+                </div>
+                <h1 className="text-xl font-black text-white tracking-tight">Akses Galeri Terkunci</h1>
+                <p className="text-xs text-slate-300">
+                  Masukkan username dan password Anda untuk membuka koleksi foto & video kenangan <span className="font-semibold text-blue-400">{settings.account_name}</span>.
+                </p>
+              </div>
 
-            <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-              <a
-                href="/"
-                className="text-xs text-slate-400 hover:text-white flex items-center gap-1 hover:underline"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Kembali ke Halaman Utama</span>
-              </a>
-            </div>
-          </motion.div>
-        </div>
+              {/* Disclaimer Box */}
+              <div className="p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-200 space-y-2 text-xs leading-relaxed">
+                <div className="flex items-center gap-2 font-bold text-amber-300">
+                  <ShieldAlert className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>Disclaimer / Peringatan:</span>
+                </div>
+                <p className="text-[11px] text-amber-100/90 leading-snug">
+                  Foto/video di dalam galeri ini memuat kenangan & foto-foto lama yang mungkin bisa bikin ilfeel, cringe, salah tingkah, atau nostalgia berlebihan. Harap persiapkan mental Anda! 😅
+                </p>
+              </div>
+
+              {/* Form Input Username & Password */}
+              <form onSubmit={handleVerifyCredentials} className="space-y-4">
+                {/* Username Input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300 block">Username</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                      <User className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      value={inputUsername}
+                      onChange={(e) => setInputUsername(e.target.value)}
+                      placeholder="Masukkan username (atau 'admin')..."
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-white/10 bg-slate-900/90 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 transition-all font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Password Input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-300 block">Password</label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
+                      <KeyRound className="w-4 h-4" />
+                    </span>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={inputPassword}
+                      onChange={(e) => setInputPassword(e.target.value)}
+                      placeholder="Masukkan password akun..."
+                      className="w-full pl-10 pr-10 py-3 rounded-xl border border-white/10 bg-slate-900/90 text-white placeholder-slate-500 text-xs focus:outline-none focus:border-blue-500 transition-all font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {passwordError && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{passwordError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isVerifyingPassword}
+                  className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white font-semibold text-xs transition-all shadow-lg shadow-blue-600/30 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isVerifyingPassword ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Memverifikasi Akun...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Unlock className="w-4 h-4" />
+                      <span>Buka Akses Galeri</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="pt-4 border-t border-white/10 flex items-center justify-between">
+                <a
+                  href="/"
+                  className="text-xs text-slate-400 hover:text-white flex items-center gap-1 hover:underline"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Kembali ke Halaman Utama</span>
+                </a>
+              </div>
+            </motion.div>
+          </div>
+        )
       ) : (
         /* UNLOCKED MAIN GALLERY CONTAINER */
         <div className="relative z-10 max-w-6xl mx-auto px-4 py-8 md:py-12 space-y-8">

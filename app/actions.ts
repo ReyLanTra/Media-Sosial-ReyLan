@@ -33,6 +33,7 @@ import {
   updateGalleryPassword,
   deleteGalleryPassword,
   verifyGalleryPassword,
+  verifyGalleryCredentials,
   SiteSettings,
   SocialButton,
   BackgroundImage,
@@ -541,17 +542,39 @@ export async function addGalleryPassword(data: Omit<GalleryPassword, 'id' | 'cre
     const authed = await isAuthenticated();
     if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
 
+    if (!data.username || data.username.trim().length < 3) {
+      return { success: false, error: 'Username wajib diisi minimal 3 karakter.' };
+    }
+
+    const cleanUsername = data.username.trim().toLowerCase();
+    if (cleanUsername === 'admin') {
+      return { success: false, error: 'Username "admin" adalah hak khusus pemilik situs dan tidak dapat dibuat ulang.' };
+    }
+
+    if (!/^[a-zA-Z0-9_.-]+$/.test(cleanUsername)) {
+      return { success: false, error: 'Username hanya boleh memuat huruf, angka, titik, strip (-), atau garis bawah (_).' };
+    }
+
+    // Cek apakah username sudah dipakai
+    const existing = await getGalleryPasswords();
+    if (existing.some((p) => p.username && p.username.trim().toLowerCase() === cleanUsername)) {
+      return { success: false, error: `Username "${cleanUsername}" sudah digunakan! Silakan pilih username lain.` };
+    }
+
     if (!data.password_text || data.password_text.length < 8 || data.password_text.length > 16) {
       return { success: false, error: 'Password harus terdiri dari 8 hingga 16 karakter.' };
     }
 
-    const created = await createGalleryPassword(data);
+    const created = await createGalleryPassword({
+      ...data,
+      username: cleanUsername,
+    });
     revalidatePath('/gallery');
     revalidatePath('/settings/galeri');
     return { success: true, data: created };
   } catch (err: any) {
     console.error('Error in addGalleryPassword:', err);
-    return { success: false, error: err?.message || 'Gagal membuat password galeri baru.' };
+    return { success: false, error: err?.message || 'Gagal membuat akun akses galeri baru.' };
   }
 }
 
@@ -559,6 +582,24 @@ export async function editGalleryPassword(id: string, updates: Partial<Omit<Gall
   try {
     const authed = await isAuthenticated();
     if (!authed) return { success: false, error: 'Akses ditolak. Anda tidak terautentikasi.' };
+
+    if (updates.username !== undefined) {
+      if (!updates.username || updates.username.trim().length < 3) {
+        return { success: false, error: 'Username wajib diisi minimal 3 karakter.' };
+      }
+      const cleanUsername = updates.username.trim().toLowerCase();
+      if (cleanUsername === 'admin') {
+        return { success: false, error: 'Username "admin" adalah hak khusus pemilik situs dan tidak dapat digunakan.' };
+      }
+      if (!/^[a-zA-Z0-9_.-]+$/.test(cleanUsername)) {
+        return { success: false, error: 'Username hanya boleh memuat huruf, angka, titik, strip (-), atau garis bawah (_).' };
+      }
+      const existing = await getGalleryPasswords();
+      if (existing.some((p) => p.id !== id && p.username && p.username.trim().toLowerCase() === cleanUsername)) {
+        return { success: false, error: `Username "${cleanUsername}" sudah digunakan oleh akun lain!` };
+      }
+      updates.username = cleanUsername;
+    }
 
     if (updates.password_text && (updates.password_text.length < 8 || updates.password_text.length > 16)) {
       return { success: false, error: 'Password harus terdiri dari 8 hingga 16 karakter.' };
@@ -570,7 +611,7 @@ export async function editGalleryPassword(id: string, updates: Partial<Omit<Gall
     return { success: true, data: updated };
   } catch (err: any) {
     console.error('Error in editGalleryPassword:', err);
-    return { success: false, error: err?.message || 'Gagal memperbarui password galeri.' };
+    return { success: false, error: err?.message || 'Gagal memperbarui akun akses galeri.' };
   }
 }
 
@@ -586,6 +627,16 @@ export async function removeGalleryPassword(id: string) {
   } catch (err: any) {
     console.error('Error in removeGalleryPassword:', err);
     return { success: false, error: err?.message || 'Gagal menghapus password galeri.' };
+  }
+}
+
+export async function checkGalleryAccess(username: string, password: string) {
+  try {
+    const result = await verifyGalleryCredentials(username, password);
+    return result;
+  } catch (err: any) {
+    console.error('Error in checkGalleryAccess:', err);
+    return { success: false, error: 'Terjadi kesalahan sistem saat memeriksa kredensial.' };
   }
 }
 

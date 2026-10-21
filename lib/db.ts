@@ -124,8 +124,12 @@ export interface GalleryItem {
 
 export interface GalleryPassword {
   id: string;
+  username: string;
   label: string;
   password_text: string;
+  welcome_message?: string | null;
+  welcome_media_url?: string | null;
+  welcome_media_type?: 'audio' | 'video' | 'image' | 'other' | null;
   expires_at: string | null; // ISO Date String or null for forever
   is_active: boolean;
   created_at?: string;
@@ -1013,8 +1017,12 @@ export const createGalleryPassword = async (
 ): Promise<GalleryPassword> => {
   const newPass: GalleryPassword = {
     id: crypto.randomUUID(),
+    username: item.username ? item.username.trim().toLowerCase() : 'tamu',
     label: item.label,
     password_text: item.password_text,
+    welcome_message: item.welcome_message || null,
+    welcome_media_url: item.welcome_media_url || null,
+    welcome_media_type: item.welcome_media_type || null,
     expires_at: item.expires_at || null,
     is_active: item.is_active ?? true,
     created_at: new Date().toISOString(),
@@ -1060,15 +1068,18 @@ export const updateGalleryPassword = async (
   id: string,
   updates: Partial<Omit<GalleryPassword, 'id'>>
 ): Promise<GalleryPassword | null> => {
+  const normalizedUpdates = {
+    ...updates,
+    ...(updates.username ? { username: updates.username.trim().toLowerCase() } : {}),
+    updated_at: new Date().toISOString(),
+  };
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = getSupabaseAdmin();
       const { data, error } = await supabase
         .from('gallery_passwords')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString(),
-        })
+        .update(normalizedUpdates)
         .eq('id', id)
         .select()
         .single();
@@ -1079,7 +1090,7 @@ export const updateGalleryPassword = async (
         if (db.gallery_passwords) {
           const idx = db.gallery_passwords.findIndex(g => g.id === id);
           if (idx !== -1) {
-            db.gallery_passwords[idx] = { ...db.gallery_passwords[idx], ...updates };
+            db.gallery_passwords[idx] = { ...db.gallery_passwords[idx], ...normalizedUpdates };
             writeLocalDb(db);
             return db.gallery_passwords[idx];
           }
@@ -1093,7 +1104,7 @@ export const updateGalleryPassword = async (
       if (db.gallery_passwords) {
         const idx = db.gallery_passwords.findIndex(g => g.id === id);
         if (idx !== -1) {
-          db.gallery_passwords[idx] = { ...db.gallery_passwords[idx], ...updates };
+          db.gallery_passwords[idx] = { ...db.gallery_passwords[idx], ...normalizedUpdates };
           writeLocalDb(db);
           return db.gallery_passwords[idx];
         }
@@ -1105,7 +1116,7 @@ export const updateGalleryPassword = async (
     if (db.gallery_passwords) {
       const idx = db.gallery_passwords.findIndex(g => g.id === id);
       if (idx !== -1) {
-        db.gallery_passwords[idx] = { ...db.gallery_passwords[idx], ...updates };
+        db.gallery_passwords[idx] = { ...db.gallery_passwords[idx], ...normalizedUpdates };
         writeLocalDb(db);
         return db.gallery_passwords[idx];
       }
@@ -1155,33 +1166,83 @@ export const deleteGalleryPassword = async (id: string): Promise<boolean> => {
   }
 };
 
-export const verifyGalleryPassword = async (inputPass: string): Promise<boolean> => {
-  if (!inputPass) return false;
-  const trimmed = inputPass.trim();
+export interface VerifyGalleryResult {
+  success: boolean;
+  username?: string;
+  welcome_message?: string | null;
+  welcome_media_url?: string | null;
+  welcome_media_type?: 'audio' | 'video' | 'image' | 'other' | null;
+  error?: string;
+}
 
-  // 1. Cek default admin password dari ENV
+export const verifyGalleryCredentials = async (
+  inputUsername: string,
+  inputPass: string
+): Promise<VerifyGalleryResult> => {
+  if (!inputUsername || !inputPass) {
+    return { success: false, error: 'Username dan password wajib diisi!' };
+  }
+  const cleanUsername = inputUsername.trim().toLowerCase();
+  const cleanPass = inputPass.trim();
+
+  // 1. Cek Admin Login (Username "admin" & Password dari .env)
   let envPass = process.env.ADMIN_PASSWORD || 'admin123';
   envPass = envPass.trim().replace(/^['"]|['"]$/g, '');
-  if (trimmed === envPass) return true;
 
-  // 2. Cek custom gallery passwords
-  const customPasswords = await getGalleryPasswords();
-  const now = new Date();
-
-  for (const passObj of customPasswords) {
-    if (!passObj.is_active) continue;
-    if (passObj.expires_at) {
-      const exp = new Date(passObj.expires_at);
-      if (!isNaN(exp.getTime()) && exp < now) {
-        continue; // Kadaluarsa
-      }
-    }
-    if (passObj.password_text.trim() === trimmed) {
-      return true;
+  if (cleanUsername === 'admin') {
+    if (cleanPass === envPass) {
+      return {
+        success: true,
+        username: 'admin',
+        welcome_message: 'Selamat datang kembali, Admin! Anda memiliki hak akses penuh ke seluruh koleksi galeri.',
+        welcome_media_url: null,
+        welcome_media_type: null,
+      };
+    } else {
+      return { success: false, error: 'Password admin salah! Silakan coba lagi.' };
     }
   }
 
-  return false;
+  // 2. Cek Custom Credentials dari Database
+  const customPasswords = await getGalleryPasswords();
+  const now = new Date();
+
+  // Cari yang cocok dengan username (case-insensitive)
+  const matchedUser = customPasswords.find(
+    (p) => p.username && p.username.trim().toLowerCase() === cleanUsername
+  );
+
+  if (!matchedUser) {
+    return { success: false, error: 'Username tidak ditemukan! Pastikan Anda memasukkan username yang benar.' };
+  }
+
+  if (!matchedUser.is_active) {
+    return { success: false, error: 'Akses galeri untuk akun ini sedang dinonaktifkan oleh pemilik situs.' };
+  }
+
+  if (matchedUser.expires_at) {
+    const exp = new Date(matchedUser.expires_at);
+    if (!isNaN(exp.getTime()) && exp < now) {
+      return { success: false, error: 'Masa aktif akses akun galeri Anda telah kadaluarsa!' };
+    }
+  }
+
+  if (matchedUser.password_text.trim() !== cleanPass) {
+    return { success: false, error: 'Password salah untuk username tersebut! Silakan periksa kembali.' };
+  }
+
+  return {
+    success: true,
+    username: matchedUser.username,
+    welcome_message: matchedUser.welcome_message || `Halo @${matchedUser.username}, selamat datang di galeri kenangan!`,
+    welcome_media_url: matchedUser.welcome_media_url || null,
+    welcome_media_type: matchedUser.welcome_media_type || null,
+  };
+};
+
+export const verifyGalleryPassword = async (inputPass: string): Promise<boolean> => {
+  const res = await verifyGalleryCredentials('admin', inputPass);
+  return res.success;
 };
 
 // --- PUSH SUBSCRIPTIONS ACTIONS ---
