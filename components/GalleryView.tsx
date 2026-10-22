@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ArrowLeft, 
@@ -30,7 +31,10 @@ import {
   User,
   Music,
   Volume2,
-  ArrowRight
+  ArrowRight,
+  Timer,
+  Hourglass,
+  CalendarPlus
 } from 'lucide-react';
 import JSZip from 'jszip';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -78,6 +82,109 @@ export default function GalleryView({
     welcome_media_url?: string | null;
     welcome_media_type?: string | null;
   } | null>(null);
+
+  // Session Info (Akun, Tanggal Dibuat, Tanggal Kadaluarsa, Status Permanen)
+  const [sessionInfo, setSessionInfo] = React.useState<{
+    username: string;
+    label?: string;
+    created_at: string | null;
+    expires_at: string | null;
+    is_permanent: boolean;
+  } | null>(null);
+
+  // Remaining Seconds for non-permanent access
+  const [remainingSeconds, setRemainingSeconds] = React.useState<number | null>(null);
+
+  // Format Tanggal dan Jam lengkap: "Pukul 14:30:00 WIB (21 Oktober 2026)"
+  const formatFullDateTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return 'Tidak tercatat';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const hours = String(d.getHours()).padStart(2, '0');
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const seconds = String(d.getSeconds()).padStart(2, '0');
+      const day = d.getDate();
+      const months = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+      const month = months[d.getMonth()];
+      const year = d.getFullYear();
+      return `Pukul ${hours}:${minutes}:${seconds} WIB (${day} ${month} ${year})`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Format hitung mundur detail: "X Hari X Jam X Menit X Detik"
+  const formatCountdownVerbose = (totalSecs: number | null) => {
+    if (totalSecs === null) return '--';
+    if (totalSecs <= 0) return '0 Detik (Waktu Habis)';
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+
+    if (days > 0) {
+      return `${days} Hari ${hours} Jam ${minutes} Menit ${seconds} Detik`;
+    }
+    if (hours > 0) {
+      return `${hours} Jam ${minutes} Menit ${seconds} Detik`;
+    }
+    return `${minutes} Menit ${seconds} Detik`;
+  };
+
+  // Format hitung mundur digital: "00h : 15m : 32s" atau "02d : 04h : 15m : 32s"
+  const formatCountdownDigital = (totalSecs: number | null) => {
+    if (totalSecs === null) return '--:--:--';
+    if (totalSecs <= 0) return '00:00:00';
+    const days = Math.floor(totalSecs / 86400);
+    const hours = Math.floor((totalSecs % 86400) / 3600);
+    const minutes = Math.floor((totalSecs % 3600) / 60);
+    const seconds = totalSecs % 60;
+
+    if (days > 0) {
+      return `${days}d : ${String(hours).padStart(2, '0')}h : ${String(minutes).padStart(2, '0')}m : ${String(seconds).padStart(2, '0')}s`;
+    }
+    return `${String(hours).padStart(2, '0')}h : ${String(minutes).padStart(2, '0')}m : ${String(seconds).padStart(2, '0')}s`;
+  };
+
+  // Hitung Mundur (Countdown Timer) & Auto-Lock ketika batas waktu akses habis
+  React.useEffect(() => {
+    if (!sessionInfo || sessionInfo.is_permanent || !sessionInfo.expires_at) {
+      return;
+    }
+
+    const expTime = new Date(sessionInfo.expires_at).getTime();
+    if (isNaN(expTime)) {
+      return;
+    }
+
+    const checkTime = () => {
+      const now = Date.now();
+      const diff = Math.floor((expTime - now) / 1000);
+
+      if (diff <= 0) {
+        // WAKTU HABIS! Otomatis tendang pengguna seketika dan tampilkan form login kembali
+        setRemainingSeconds(0);
+        setIsUnlocked(false);
+        setShowWelcomeModal(false);
+        const expiredUser = sessionInfo.username;
+        const expiredAtStr = formatFullDateTime(sessionInfo.expires_at);
+        setSessionInfo(null);
+        setPasswordError(
+          `Batas waktu akses akun @${expiredUser} telah habis pada ${expiredAtStr}. Akses otomatis ditutup demi keamanan. Silakan masukkan username & password baru yang masih aktif.`
+        );
+        return;
+      }
+
+      setRemainingSeconds(diff);
+    };
+
+    const interval = setInterval(checkTime, 1000);
+    return () => clearInterval(interval);
+  }, [sessionInfo, isUnlocked]);
 
   // Hapus session unlock lama agar refresh selalu meminta kredensial
   React.useEffect(() => {
@@ -141,6 +248,26 @@ export default function GalleryView({
           welcome_media_url: res.welcome_media_url,
           welcome_media_type: res.welcome_media_type,
         });
+        setSessionInfo({
+          username: res.username || inputUsername.trim(),
+          label: res.label,
+          created_at: res.created_at || null,
+          expires_at: res.expires_at || null,
+          is_permanent: !!res.is_permanent,
+        });
+
+        // Set sisa detik awal jika berbatas waktu
+        if (!res.is_permanent && res.expires_at) {
+          const exp = new Date(res.expires_at).getTime();
+          if (!isNaN(exp)) {
+            setRemainingSeconds(Math.max(0, Math.floor((exp - Date.now()) / 1000)));
+          } else {
+            setRemainingSeconds(null);
+          }
+        } else {
+          setRemainingSeconds(null);
+        }
+
         setShowWelcomeModal(true);
         setInputPassword('');
         setInputUsername('');
@@ -164,6 +291,8 @@ export default function GalleryView({
     setIsUnlocked(false);
     setShowWelcomeModal(false);
     setWelcomeData(null);
+    setSessionInfo(null);
+    setRemainingSeconds(null);
   };
 
   // ZIP Download All Items
@@ -409,6 +538,31 @@ export default function GalleryView({
                 </div>
               )}
 
+              {/* Info Sesi Akses Berbatas Waktu di Welcome Screen */}
+              {sessionInfo && !sessionInfo.is_permanent && sessionInfo.expires_at && (
+                <div className="p-4 rounded-2xl border border-amber-500/30 bg-amber-950/40 text-left space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="font-bold text-amber-300 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider">
+                      <Hourglass className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Akses Berbatas Waktu</span>
+                    </span>
+                    <span className="font-mono font-bold text-amber-300 bg-amber-500/20 px-2.5 py-1 rounded-xl border border-amber-500/30 text-xs">
+                      Sisa: {formatCountdownDigital(remainingSeconds)}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-300 space-y-1.5 pt-1 border-t border-white/10">
+                    <p className="flex items-center gap-1.5">
+                      <CalendarPlus className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      <span>Dibuat: <strong className="text-white font-medium">{formatFullDateTime(sessionInfo.created_at)}</strong></span>
+                    </p>
+                    <p className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span>Habis pada: <strong className="text-amber-200 font-medium">{formatFullDateTime(sessionInfo.expires_at)}</strong></span>
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Enter Button */}
               <button
                 onClick={handleProceedToGallery}
@@ -520,13 +674,13 @@ export default function GalleryView({
               </form>
 
               <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-                <a
+                <Link
                   href="/"
                   className="text-xs text-slate-400 hover:text-white flex items-center gap-1 hover:underline"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />
                   <span>Kembali ke Halaman Utama</span>
-                </a>
+                </Link>
               </div>
             </motion.div>
           </div>
@@ -537,22 +691,39 @@ export default function GalleryView({
           {/* Navigation & Header */}
           <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-4 md:p-6 rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-2xl shadow-2xl">
             <div className="flex items-center gap-2 flex-wrap">
-              <a
+              <Link
                 href="/"
                 className="flex items-center gap-2 px-3.5 py-2 rounded-2xl border border-white/15 bg-white/5 hover:bg-white/15 active:scale-95 text-white text-xs font-semibold transition-all shadow-lg"
               >
                 <ArrowLeft className="w-4 h-4 text-blue-400" />
                 <span>Ke Utama</span>
-              </a>
+              </Link>
 
               <button
                 onClick={handleLockGallery}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border border-white/15 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold transition-all shadow-lg"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border border-white/15 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold transition-all shadow-lg cursor-pointer"
                 title="Kunci Sesi Galeri"
               >
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
                 <span>Kunci Galeri</span>
               </button>
+
+              {/* Live Mini Countdown Pill in Header for Non-Permanent Credentials */}
+              {sessionInfo && !sessionInfo.is_permanent && remainingSeconds !== null && (
+                <div
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border text-xs font-mono font-bold transition-all shadow-lg ${
+                    remainingSeconds <= 300
+                      ? 'bg-rose-500/25 border-rose-500/60 text-rose-200 animate-pulse'
+                      : remainingSeconds <= 3600
+                      ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                      : 'bg-blue-500/15 border-blue-500/30 text-blue-300'
+                  }`}
+                  title="Sisa Waktu Akses Sesi Galeri Anda"
+                >
+                  <Hourglass className="w-3.5 h-3.5" />
+                  <span>{formatCountdownDigital(remainingSeconds)}</span>
+                </div>
+              )}
             </div>
 
             <div className="text-center md:text-right space-y-0.5">
@@ -583,7 +754,7 @@ export default function GalleryView({
 
               <button
                 onClick={handleShare}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-medium text-slate-300 hover:text-white transition-all"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-medium text-slate-300 hover:text-white transition-all cursor-pointer"
                 title="Bagikan Tautan Galeri"
               >
                 {copiedShare ? <Check className="w-4 h-4 text-emerald-400" /> : <Share2 className="w-4 h-4" />}
@@ -591,6 +762,122 @@ export default function GalleryView({
               </button>
             </div>
           </header>
+
+          {/* BANNER HITUNG MUNDUR & INFORMASI KREDENSIAL */}
+          {sessionInfo && (
+            !sessionInfo.is_permanent && sessionInfo.expires_at ? (
+              <div
+                className={`p-5 md:p-6 rounded-3xl border backdrop-blur-2xl transition-all shadow-2xl relative overflow-hidden space-y-4 ${
+                  remainingSeconds !== null && remainingSeconds <= 300
+                    ? 'border-rose-500/50 bg-gradient-to-br from-rose-950/40 via-slate-950/80 to-slate-950/90 shadow-[0_0_50px_rgba(244,63,94,0.2)]'
+                    : remainingSeconds !== null && remainingSeconds <= 3600
+                    ? 'border-amber-500/40 bg-gradient-to-br from-amber-950/30 via-slate-950/80 to-slate-950/90 shadow-[0_0_40px_rgba(245,158,11,0.15)]'
+                    : 'border-blue-500/30 bg-gradient-to-br from-blue-950/30 via-slate-950/80 to-slate-950/90 shadow-[0_0_40px_rgba(59,130,246,0.12)]'
+                }`}
+              >
+                {/* Header Banner: Status & Real-time Big Countdown */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold font-mono">
+                        <Timer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>AKSES BERBATAS WAKTU</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-mono font-semibold">
+                        <User className="w-3 h-3 text-blue-400" />
+                        <span>@{sessionInfo.username}</span>
+                      </span>
+                      {sessionInfo.label && (
+                        <span className="text-xs text-slate-400">({sessionInfo.label})</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-300">
+                      Sesi galeri Anda aktif dengan durasi terbatas. Saat waktu habis, galeri akan otomatis terkunci kembali.
+                    </p>
+                  </div>
+
+                  {/* Big Digital Countdown Display */}
+                  <div className={`flex flex-col items-start md:items-end p-3.5 rounded-2xl border backdrop-blur-xl shrink-0 ${
+                    remainingSeconds !== null && remainingSeconds <= 300
+                      ? 'bg-rose-500/20 border-rose-500/40 text-rose-300 animate-pulse'
+                      : remainingSeconds !== null && remainingSeconds <= 3600
+                      ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                      : 'bg-white/5 border-white/10 text-emerald-300'
+                  }`}>
+                    <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400">
+                      Sisa Waktu Akses
+                    </span>
+                    <span className="text-2xl md:text-3xl font-black font-mono tracking-wider">
+                      {formatCountdownDigital(remainingSeconds)}
+                    </span>
+                    <span className="text-[11px] font-medium text-slate-300 font-mono mt-0.5">
+                      ({formatCountdownVerbose(remainingSeconds)})
+                    </span>
+                  </div>
+                </div>
+
+                {/* Detail Information Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                  {/* Card 1: Waktu Dibuat */}
+                  <div className="p-3.5 rounded-2xl border border-white/10 bg-white/[0.02] flex items-start gap-3">
+                    <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400 shrink-0 border border-blue-500/30">
+                      <CalendarPlus className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-0.5 min-w-0">
+                      <span className="text-[11px] font-semibold text-slate-400 block">
+                        Username & Password Dibuat Pada:
+                      </span>
+                      <span className="text-xs font-bold text-white block">
+                        {formatFullDateTime(sessionInfo.created_at)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Waktu Kadaluarsa */}
+                  <div className="p-3.5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] flex items-start gap-3">
+                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 border border-amber-500/30">
+                      <Hourglass className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-0.5 min-w-0">
+                      <span className="text-[11px] font-semibold text-amber-300 block">
+                        Akses Akan Habis Pada:
+                      </span>
+                      <span className="text-xs font-bold text-amber-200 block">
+                        {formatFullDateTime(sessionInfo.expires_at)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Keamanan Otomatis */}
+                  <div className="p-3.5 rounded-2xl border border-white/10 bg-white/[0.02] flex items-start gap-3 sm:col-span-2 lg:col-span-1">
+                    <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 shrink-0 border border-purple-500/30">
+                      <ShieldAlert className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-0.5 min-w-0">
+                      <span className="text-[11px] font-semibold text-purple-300 block">
+                        Proteksi Keamanan:
+                      </span>
+                      <span className="text-xs font-medium text-slate-300 block leading-tight">
+                        Terkunci otomatis saat waktu habis atau halaman di-refresh.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Permanent Access Badge */
+              <div className="px-5 py-3 rounded-2xl border border-white/10 bg-white/[0.02] backdrop-blur-xl flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Login sebagai <strong className="text-white font-mono">@{sessionInfo.username}</strong> ({sessionInfo.label || 'Admin'})</span>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold text-[11px]">
+                  <Check className="w-3 h-3 text-emerald-400" />
+                  <span>Akses Permanen (Tanpa Batas Waktu)</span>
+                </span>
+              </div>
+            )
+          )}
 
           {/* Filter Bar */}
           <div className="flex items-center justify-center gap-2 p-1.5 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl w-fit mx-auto">

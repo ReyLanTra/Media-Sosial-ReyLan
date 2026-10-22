@@ -1169,6 +1169,10 @@ export const deleteGalleryPassword = async (id: string): Promise<boolean> => {
 export interface VerifyGalleryResult {
   success: boolean;
   username?: string;
+  label?: string;
+  created_at?: string | null;
+  expires_at?: string | null;
+  is_permanent?: boolean;
   welcome_message?: string | null;
   welcome_media_url?: string | null;
   welcome_media_type?: 'audio' | 'video' | 'image' | 'other' | null;
@@ -1194,6 +1198,10 @@ export const verifyGalleryCredentials = async (
       return {
         success: true,
         username: 'admin',
+        label: 'Administrator (Pemilik Situs)',
+        created_at: null,
+        expires_at: null,
+        is_permanent: true,
         welcome_message: 'Selamat datang kembali, Admin! Anda memiliki hak akses penuh ke seluruh koleksi galeri.',
         welcome_media_url: null,
         welcome_media_type: null,
@@ -1234,6 +1242,10 @@ export const verifyGalleryCredentials = async (
   return {
     success: true,
     username: matchedUser.username,
+    label: matchedUser.label,
+    created_at: matchedUser.created_at || null,
+    expires_at: matchedUser.expires_at || null,
+    is_permanent: !matchedUser.expires_at,
     welcome_message: matchedUser.welcome_message || `Halo @${matchedUser.username}, selamat datang di galeri kenangan!`,
     welcome_media_url: matchedUser.welcome_media_url || null,
     welcome_media_type: matchedUser.welcome_media_type || null,
